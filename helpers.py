@@ -1,38 +1,52 @@
-# bueno, ya intenté varias y parece que la más sencilla es IMAPTOOLS 
+# bueno, ya intenté varias y parece que la más sencilla es IMAPTOOLS
 import imaplib
 import socket
 import ssl
 import time
 import traceback
 
-from imap_tools import A, MailBox, MailboxLoginError, MailboxLogoutError
+from imap_tools import AND, A, MailBox, MailboxLoginError, MailboxLogoutError
 # establecemos conexión con PyMongo
 from pymongo import MongoClient
 
-conn = MongoClient("1.1.1.1:2",
-                       username='user1',
-                       password="pwd1",
-                       authsource="admin",
-                       authMechanism="SCRAM-SHA-256")
-db = conn['afiliacion']
-col_solicitudes = db['solicitudes']
-col_bitacora = db['bitacora']
-conn_nvo = MongoClient("2.2.2.2:3",
-                       username='user2',
-                       password="pwd2",
-                       authsource="admin",
-                       authMechanism="SCRAM-SHA-256")
-db2 = conn_nvo['afiliacion']
-col_solicitudes2 = db2['solicitudes']
-col_bitacora2 = db2['bitacora']
+conn_nvo = MongoClient(
+    IP_MONGO_CLIENT,
+    username=USER_NAME_MONGO,
+    password=PWD_MONGO,
+    authsource="admin",
+    authMechanism="SCRAM-SHA-256",
+)
+db2 = conn_nvo["afiliacion"]
+col_solicitudes2 = db2["solicitudes"]
+col_bitacora2 = db2["bitacora"]
 col_errores = db2["errores_sol"]
 
 import os
 
 # claves de operacion válidas
-cves_solicitud = ["CDA01","CDA02","CDA03","CDA04","CDA05","CDA06","CDA07","CDA08",
-                 "MOTIVO1","MOTIVO2","MOTIVO7","EP","LAUDO","IVRO","TEC","MOD32","MOD33","MOD40",
-                 "PTH","PTI","CDA00"]
+cves_solicitud = [
+    "CDA01",
+    "CDA02",
+    "CDA03",
+    "CDA04",
+    "CDA05",
+    "CDA06",
+    "CDA07",
+    "CDA08",
+    "MOTIVO1",
+    "MOTIVO2",
+    "MOTIVO7",
+    "EP",
+    "LAUDO",
+    "IVRO",
+    "TEC",
+    "MOD32",
+    "MOD33",
+    "MOD40",
+    "PTH",
+    "PTI",
+    "CDA00",
+]
 import email
 import mimetypes
 import re
@@ -51,47 +65,70 @@ from io import BytesIO, StringIO
 
 import pandas as pd
 import smbclient
-from credenciales import correo, password
 from tqdm import tqdm
 from unidecode import unidecode
 
+from credenciales import (DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR, EMAIL_DUDAS,
+                          EMAIL_MAILBOX, EMAIL_MICROSOFT, FOLDER_MAILBOX,
+                          IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
+                          PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
+                          PORT_SMTP, PWD_MONGO, URL_CIRCULAR, USER_NAME_MONGO)
 # archivo que contiene la lista de las subdelegaciones válidas
 from cves_subdelegacion import cves_subdel
 
 # path de ejecución, ACTUALIZAR
-path = "./Afiliacion_Correos"
+path = "."
 # leemos el archivo con los remitentes
-df_subdelegados = pd.read_csv(f'{path}/Directorio Nacional Subdelegados.csv')
+df_subdelegados = pd.read_csv(f"{path}/Directorio Nacional Subdelegados.csv")
 subdelegados = df_subdelegados.Email.str.strip().tolist()
 del df_subdelegados
 
-# preparamos el cliente SMB (casi nunca se usa, pero más vale jejej)
-smbclient.ClientConfig(username=correo, password=password)
+smbclient.ClientConfig(username=EMAIL_MAILBOX, password=PASSWORD_MAILBOX)
 
 # leemos el archivo que contiene los operadores por tipo de operación
-df_usuarios = pd.read_csv(f"{path}/Destinatarios en CA 2024 04 08.csv")
+df_usuarios = pd.read_csv(f"{path}/Destinatarios en CA.csv")
 
 # mucha flexibilidad con la responsiva jajaj, con que tengan alguno de estos textos (quitando puntuación y espacios dobles) se las damos por buena
-str_responsiva_1 = 'de conformidad con el artículo 0.1 y 0.2'
-str_responsiva_1 = str_responsiva_1.translate(str.maketrans('', '', string.punctuation)).strip().translate(str.maketrans('', '', string.punctuation)).strip()
-str_responsiva_1_art = 'de conformidad con el art 0.1 y 0.2 del reglamento'
-str_responsiva_1_art = str_responsiva_1_art.translate(str.maketrans('', '', string.punctuation)).strip()
-str_responsiva_1_alt = "de conformidad con los artículos 0.1 y 0.2"
-str_responsiva_1_alt = str_responsiva_1_alt.translate(str.maketrans('', '', string.punctuation)).strip()
+str_responsiva_1 = "de conformidad con el artículo 150 y 155"
+str_responsiva_1 = (
+    str_responsiva_1.translate(str.maketrans("", "", string.punctuation))
+    .strip()
+    .translate(str.maketrans("", "", string.punctuation))
+    .strip()
+)
+str_responsiva_1_art = "de conformidad con el art 150 y 155 del reglamento"
+str_responsiva_1_art = str_responsiva_1_art.translate(
+    str.maketrans("", "", string.punctuation)
+).strip()
+str_responsiva_1_alt = "de conformidad con los artículos 150 y 155"
+str_responsiva_1_alt = str_responsiva_1_alt.translate(
+    str.maketrans("", "", string.punctuation)
+).strip()
 
-str_responsiva_2 = 'que se encuentra debidamente soportado con la documentación que se adjunta'.strip()
-str_responsiva_2 = str_responsiva_2.translate(str.maketrans('', '', string.punctuation)).strip()
+str_responsiva_2 = (
+    "que se encuentra debidamente soportado con la documentación que se adjunta".strip()
+)
+str_responsiva_2 = str_responsiva_2.translate(
+    str.maketrans("", "", string.punctuation)
+).strip()
+
 
 # función que valida el último elemento del asunto del correo (es decir, que sea un NSS, un RP o una fecha, según sea el caso)
 # los regex están feos pero son eficientes
-def regex_operaciones(tipo_operacion:str, value: str)->bool:
+def regex_operaciones(tipo_operacion: str, value: str) -> bool:
     try:
-        if tipo_operacion.upper() in [x for x in cves_solicitud if x not in ['EP','MOD40']]:
+        if tipo_operacion.upper() in [
+            x for x in cves_solicitud if x not in ["EP", "MOD40"]
+        ]:
             excepcion = "El NSS debe de tener 11 dígitos"
-            res = re.match(r'^\d{11}$', value)
+            res = re.match(r"^\d{11}$", value)
         elif tipo_operacion.upper() == "EP":
             excepcion = f"El registro patronal debe de tener 8 o 10 caracteres. El registro patronal provisto es {value}"
-            res = re.match(r'^[a-zA-Z0-9]{8}$',value) or re.match(r'^[a-zA-Z0-9]{10}$',value) or re.match(r'^[a-zA-Z0-9]{11}$',value)
+            res = (
+                re.match(r"^[a-zA-Z0-9]{8}$", value)
+                or re.match(r"^[a-zA-Z0-9]{10}$", value)
+                or re.match(r"^[a-zA-Z0-9]{11}$", value)
+            )
         elif tipo_operacion.upper() == "MOD40":
             excepcion = "La fecha debe de estar en el formato dd/mm/yyyy"
             res = re.match(r"^(0[1-9]|[1-2][0-9]|3[0-1])/(0[1-9]|1[0-2])/\d{4}$", value)
@@ -102,22 +139,29 @@ def regex_operaciones(tipo_operacion:str, value: str)->bool:
     except Exception as e:
         return False, e
 
+
 # función que valida el asunto
-def validar_asunto(asunto:str)->bool:
+def validar_asunto(asunto: str) -> bool:
     try:
-        asunto_split = asunto.split('-')
+        asunto_split = asunto.split("-")
         # validamos componente por componente, primero vemos que al separar por guiones el asunto, éste tenga 4 elementos, si no, tiramos excepción
         if len(asunto_split) != 4:
             raise Exception("Asunto inválido. Consulte el formato.")
         else:
             # si pasamos el primer check, validamos que los primeros dos elementos resulten en una cve de subdelgación válida
-            cve_compue = f"{str(asunto_split[0]).zfill(2)}{str(asunto_split[1]).zfill(2)}"
+            cve_compue = (
+                f"{str(asunto_split[0]).zfill(2)}{str(asunto_split[1]).zfill(2)}"
+            )
             if cve_compue not in cves_subdel:
-                raise Exception("La combinación de cve_delegacion y cve_subdelegacion proporcionadas no forman una subdelegación válida.")
+                raise Exception(
+                    "La combinación de cve_delegacion y cve_subdelegacion proporcionadas no forman una subdelegación válida."
+                )
             else:
                 # validamos que el tercer elemento sea un tipo de operación válida
                 if asunto_split[2].upper() not in cves_solicitud:
-                    raise Exception(f"{asunto_split[2]} no es un tipo de operación válida")
+                    raise Exception(
+                        f"{asunto_split[2]} no es un tipo de operación válida"
+                    )
                 # finalmente, revisamos que el cuarto elemento sea del tipo correcto (según el tipo de operación), si todo bien, regresamos True
                 else:
                     return regex_operaciones(asunto_split[2], asunto_split[3])
@@ -125,40 +169,138 @@ def validar_asunto(asunto:str)->bool:
     except Exception as e:
         return False, e
 
+
 # ciertas operaciones tienen requisitos específicos para el cuerpo
 # (por ejemplo, una tabla con ciertas columnas), esta función valida que, según el tipo de operación, eso se cumpla
-def validar_ops(cuerpo:str, tipo_operacion:str)->[bool, str]:
+def validar_ops(cuerpo: str, tipo_operacion: str) -> [bool, str]:
     try:
         # primero, le quitamos acentos, puntuación y mayúsculas al cuerpo del correo y al tipo de operación
-        cuerpo = unidecode(cuerpo.lower().translate(str.maketrans('', '', string.punctuation)).strip()).replace('\r\n', ' ')
+        cuerpo = unidecode(
+            cuerpo.lower().translate(str.maketrans("", "", string.punctuation)).strip()
+        ).replace("\r\n", " ")
         tipo_operacion = tipo_operacion.lower()
         # ya aquí según el cuerpo de operación pedimos que existan los elementos necesarios
         # si existen, regresamos True y None, si no, False y la excepción
-        if tipo_operacion in ["cda07","motivo2","motivo7"]:
-            if ('ciz' in cuerpo or 'cicz' in cuerpo) and 'nss' in cuerpo.replace('.','') and (("registro" in cuerpo and "patronal" in cuerpo) or "reg patronal" in cuerpo or "rp" in cuerpo or "registro pat" in cuerpo) and "dice" in cuerpo and ("debe" in cuerpo and "decir" in cuerpo):
-                return True, None
+        if tipo_operacion in ["cda07", "motivo2", "motivo7"]:
+            if (
+                ("ciz" in cuerpo or "cicz" in cuerpo)
+                and "nss" in cuerpo.replace(".", "")
+                and (
+                    ("registro" in cuerpo and "patronal" in cuerpo)
+                    or "reg patronal" in cuerpo
+                    or "rp" in cuerpo
+                    or "registro pat" in cuerpo
+                    or "reg pat" in cuerpo
+                )
+                and "dice" in cuerpo
+                and ("debe" in cuerpo and "decir" in cuerpo)
+            ):
+                if ( ("tc11" in cuerpo) or ("tc 11" in cuerpo) or ("tc-11"in cuerpo) ):
+                    raise Exception(
+                        "No puede referirse a TC11 en las solicitudes CDA07. Revise su solicitud y/o CIZ en tabla"
+                    )
+                else:
+                    return True, None
             else:
-                raise Exception("Debe de incluir en el cuerpo una tabla con las siguientes columnas: CIZ, NSS, Registro Patronal, Dice y Debe decir. La tabla no puede ser una imagen.")
+                raise Exception(
+                    "Debe de incluir en el cuerpo una tabla con las siguientes columnas: CIZ, NSS, REGISTRO PATRONAL, DICE, DEBE DECIR. La tabla no puede ser una imagen."
+                )
         elif tipo_operacion == "motivo1":
-            if ('ciz' in cuerpo or 'cicz' in cuerpo) and 'nss' in cuerpo.replace('.','') and (("registro" in cuerpo and "patronal" in cuerpo) or "reg patronal" in cuerpo or "rp" in cuerpo) and "dice" in cuerpo and ("debe" in cuerpo and "decir" in cuerpo) and 'baja' in cuerpo and 'causa' in cuerpo:
+            cuerpo_limpio = cuerpo.replace(" ", "").replace("\t", "")
+            if (
+                ("ciz" in cuerpo or "cicz" in cuerpo)
+                and "nss" in cuerpo.replace(".", "")
+                and (
+                    ("registro" in cuerpo and "patronal" in cuerpo)
+                    or "reg patronal" in cuerpo
+                    or "rp" in cuerpo
+                    or "registro pat" in cuerpo
+                    or "reg pat" in cuerpo
+                )
+                and "dice" in cuerpo
+                and ("debe" in cuerpo and "decir" in cuerpo)
+                and "baja" in cuerpo
+                and "causa" in cuerpo
+                and (
+                    "bajadelrpcausadebaja" in cuerpo_limpio
+                    or "bajadelrpcausadelabaja" in cuerpo_limpio
+                    or "bajarpcausadebaja" in cuerpo_limpio
+                    or "bajadelregistropatronalcausadelabaja" in cuerpo_limpio
+                    or "bajadelregistropatronalcausadebaja" in cuerpo_limpio
+                )
+            ):
                 return True, None
             else:
-                raise Exception("Debe de incluir en el cuerpo una tabla con las siguientes columnas: CIZ, NSS, Registro Patronal, Dice, Debe decir, Baja del RP, Causa de baja del RP. La tabla no puede ser una imagen.")
-        elif tipo_operacion == 'mod40':
-            if 'nss' in cuerpo.replace('.','') and 'tipo de mov' in cuerpo and "salario" in cuerpo and ('ciz' in cuerpo or 'cicz' in cuerpo or 'cisz' in cuerpo):
+                raise Exception(
+                    "Debe de incluir en el cuerpo una tabla con las siguientes columnas: CIZ, NSS, REGISTRO PATRONAL, BAJA DEL RP, CAUSA DE BAJA DEL RP, DICE, DEBE DECIR. La tabla no puede ser una imagen."
+                )
+        elif tipo_operacion == "mod40":
+            cuerpo_limpio = cuerpo.replace(".", "").replace(" ", "").replace("\t", "")
+            if (
+                "nss" in cuerpo_limpio
+                and ("tipodemov" in cuerpo_limpio or "tipomov" in cuerpo_limpio)
+                and "salario" in cuerpo
+                and ("ciz" in cuerpo or "cicz" in cuerpo or "cisz" in cuerpo)
+            ):
                 return True, None
             else:
-                raise Exception("Debe de incluir en el cuerpo una tabla con las siguientes columnas: NSS, Tipo de movimiento, Salario, CIZ 1, 2 o 3")
+                raise Exception(
+                    "Debe de incluir en el cuerpo una tabla con las siguientes columnas: NSS, Tipo de movimiento Reingreso o baja, SALARIO, CIZ 1, 2 o 3"
+                )
     except Exception as e:
         return False, e
 
+
 # esta función simplemente combina la validación de la nota responsiva con la validación de la tabla contenida en el cuerpo - según el tipo de solicitud
-def validar_cuerpo_correo(cuerpo:str, tipo_operacion:str)->bool:
+def validar_cuerpo_correo(cuerpo: str, tipo_operacion: str) -> bool:
     try:
-        if (unidecode(" ".join(str_responsiva_1.lower().split())) not in unidecode(" ".join(cuerpo.replace('“',"").replace('”',"").replace("  ", " ").translate(str.maketrans('', '', string.punctuation)).lower().strip().split()))) and (unidecode(" ".join(str_responsiva_1_art.lower().split())) not in unidecode(" ".join(cuerpo.replace('“',"").replace('”',"").replace("  ", " ").translate(str.maketrans('', '', string.punctuation)).lower().strip().split()))) and (unidecode(" ".join(str_responsiva_1_alt.lower().split())) not in unidecode(" ".join(cuerpo.replace('“',"").replace('”',"").replace("  ", " ").translate(str.maketrans('', '', string.punctuation)).lower().strip().split()))):
+        if (
+            (
+                unidecode(" ".join(str_responsiva_1.lower().split()))
+                not in unidecode(
+                    " ".join(
+                        cuerpo.replace("“", "")
+                        .replace("”", "")
+                        .replace("  ", " ")
+                        .translate(str.maketrans("", "", string.punctuation))
+                        .lower()
+                        .strip()
+                        .split()
+                    )
+                )
+            )
+            and (
+                unidecode(" ".join(str_responsiva_1_art.lower().split()))
+                not in unidecode(
+                    " ".join(
+                        cuerpo.replace("“", "")
+                        .replace("”", "")
+                        .replace("  ", " ")
+                        .translate(str.maketrans("", "", string.punctuation))
+                        .lower()
+                        .strip()
+                        .split()
+                    )
+                )
+            )
+            and (
+                unidecode(" ".join(str_responsiva_1_alt.lower().split()))
+                not in unidecode(
+                    " ".join(
+                        cuerpo.replace("“", "")
+                        .replace("”", "")
+                        .replace("  ", " ")
+                        .translate(str.maketrans("", "", string.punctuation))
+                        .lower()
+                        .strip()
+                        .split()
+                    )
+                )
+            )
+        ):
             raise Exception("No se incluyó la nota responsiva en el cuerpo")
         else:
-            if tipo_operacion in ["CDA07", "MOTIVO1", "MOTIVO2", "MOTIVO7","MOD40"]:
+            if tipo_operacion in ["CDA07", "MOTIVO1", "MOTIVO2", "MOTIVO7", "MOD40"]:
                 result, excepcion = validar_ops(cuerpo, tipo_operacion)
                 return result, excepcion
             else:
@@ -166,27 +308,41 @@ def validar_cuerpo_correo(cuerpo:str, tipo_operacion:str)->bool:
     except Exception as e:
         return False, e
 
+
 # columnas que DEBE tener la bitácora
-columnas_bitacora = ['CLAVE_OOAD', 'CLAVE_SUBDELEGACIÓN', 'CLAVE_DE_TIPO_DE_SOLICITUD',
-       'CONSECUTIVO_5_POSICIONES', 'NSS_11_POSICIONES', 'PRIMER_APELLIDO',
-       'SEGUNDO_APELLIDO', 'NOMBRE',
-       'LA MODIFICACIÓN SOLICITADA AFECTA PERIODOS CON FECHA PREVIA A dd mm yyyy']
+columnas_bitacora = [
+    "CLAVE_OOAD",
+    "CLAVE_SUBDELEGACIÓN",
+    "CLAVE_DE_TIPO_DE_SOLICITUD",
+    "CONSECUTIVO_5_POSICIONES",
+    "NSS_11_POSICIONES",
+    "PRIMER_APELLIDO",
+    "SEGUNDO_APELLIDO",
+    "NOMBRE",
+    "LA MODIFICACIÓN SOLICITADA AFECTA PERIODOS CON FECHA PREVIA AL 1 DE JULIO DE 1997",
+]
+
 
 # función para validar la forma de la bitácora cuando se envía una carpeta compartida
-def validar_bitacora_smb(cuerpo:str)->pd.DataFrame:
+def validar_bitacora_smb(cuerpo: str) -> pd.DataFrame:
     # primero, buscamos la IP con este regex
-    ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    ip_pattern = r"\b(?:\d{1,3}\.){3}\d{1,3}\b"
     match = re.search(ip_pattern, cuerpo)
-    # genermaos la URL 
+    # genermaos la URL
     url = f"{match.group()}{cuerpo.split(match.group())[1].split(' ')[0].split('<')[0]}"
     # abrimos conexión con Samba
-    archivos_smb = smbclient.listdir(fr"\\{url}")
+    archivos_smb = smbclient.listdir(rf"\\{url}")
     # buscamos en la carpeta el archivo que empiece con BCA, BCP o BC40 y sea formato excel (.xls o .xlsx)
-    bitacora = [x for x in archivos_smb if ('BCA' in x or 'BCP' in x or 'BC40' in x) and ('.xls' in x)]
+    bitacora = [
+        x
+        for x in archivos_smb
+        if ("BCA" in x or "BCP" in x or "BC40" in x) and (".xls" in x)
+    ]
     # SÓLO DEBE HABER 1 ARCHIVO CON ESE NOMBRE EN LA CARPETA, SI NO, MANDAMOS ERROR
     if len(bitacora) == 1:
-        with smbclient.open_file(fr"\\{url}\\{bitacora[0]}", mode="rb",
-                        encoding='ISO-8859-1') as fd:
+        with smbclient.open_file(
+            rf"\\{url}\\{bitacora[0]}", mode="rb", encoding="ISO-8859-1"
+        ) as fd:
             bitacora = pd.read_excel(fd)
             # leemos la bitácora y validamos que las columans sean idénticas a las del formato (importa el orden)
             # y que tenga al menos 1 fila de información (si solo mandan un archivo con los encabezados, se les regresa)
@@ -194,18 +350,27 @@ def validar_bitacora_smb(cuerpo:str)->pd.DataFrame:
             # si cumple todo, regresamos la bitácora (para después subirla a la BD)
             return bitacora
         else:
-            raise Exception("O la bitácora está vacía o no tiene las mismas columnas que el formato original.")
+            raise Exception(
+                "O la bitácora está vacía o no tiene las mismas columnas que el formato original."
+            )
     else:
-        raise Exception("No encontramos la bitácora en la carpeta (recuerde que el nombre debe empezar con BCA, BCP o BC40, según el tipo de solicitud) o no pudimos acceder al recurso compartido.")
+        raise Exception(
+            "No encontramos la bitácora en la carpeta (recuerde que el nombre debe empezar con BCA, BCP o BC40, según el tipo de solicitud) o no pudimos acceder al recurso compartido."
+        )
+
 
 nota_carpeta = "No debe de combinar más de un anexo en un solo archivo. Si en conjunto los archivos pesan más de 10MB incluír una carpeta con el mismo nombre que el asunto del correo."
-# función que valida anexos, está horrible esta sección, pero genuinamente creo que no había otra manera de hacerlo
+
+
 def validar_anexos(
     attachments: list, tipo_operacion: str, asunto: str, cuerpo: str
 ) -> bool:
     # quitamos el archivo image001 de los anexos (este corresponde a la firma)
     attachments = [
-        x for x in attachments if ("image001" not in x.filename.split(".")[0])
+        x for x in attachments if ("inline" not in x.content_disposition)
+    ]
+    attachments = [
+        x for x in attachments if ("image00" not in x.filename.split(".")[0])
     ]
     try:
         if (
@@ -222,7 +387,19 @@ def validar_anexos(
                 ]
             )
             == 1
-            ):
+        ):
+            nomb_archivo = [
+                x.filename
+                for x in attachments
+                if (
+                    "BCA" in x.filename.upper()
+                    or "BCP" in x.filename.upper()
+                    or "BC40" in x.filename.upper()
+                )
+                and (".xls" in x.filename.lower())
+            ]
+            # tipo_archivos = Counter([x.content_type for x in attachments])
+            # print(nomb_archivo)
             # leemos la bitácora (sólo debe haber UN archvio excel que empiece con BCA, BCP o BC40 en el correo, si hay más o menos de 1, rechazamos
             bitacora = pd.read_excel(
                 BytesIO(
@@ -238,15 +415,27 @@ def validar_anexos(
                     ][0]
                 )
             )
+            #if (bitacora.shape[0] > 10) or (bitacora.shape[1] > 9):
+            print(f"Tamaño bitacora para {asunto}:{bitacora.shape}")
+            if bitacora.shape[0] > 49:
+               excepcion = "La bitácora parece exceder de tamaño. No incluir toda la historia de su bitácora, enviar sólo el renglón correspondiente a la petición de su correo. O puede ser que inadvertidamente haya agregado/modificado renglones/columnas vacías. Revise la cantidad de filas o columnas."
+               print(f"Excepcion para {asunto}: {excepcion}")
+               raise Exception(excepcion)
+            # Si es un CDA07, validamos que el NSS del asunto esté incluido en el nombre del Excel/bitacora
+            if tipo_operacion.lower() == "cda07":
+                if asunto.split("-")[3] not in nomb_archivo[0]:
+                    excepcion = "El NSS contenido en el asunto no es el mismo indicado en el nombre de la bitácora"
+                    print(f"Excepcion para {asunto}: {excepcion}")
+                    raise Exception(excepcion)
             # validamos columnas y que la bitácora tenga al menos una fila de información
             if bitacora.columns.tolist() != columnas_bitacora or bitacora.empty:
-                excepcion = "O la bitácora está vacía o no tiene las columnas del formato original."
+                excepcion = "O la bitácora está vacía o no tiene las columnas del formato original. Revise también que no haya incluido columnas adicionales al final (incluso vacías)"
                 raise Exception(excepcion)
         else:
             excepcion = "No adjuntó la bitácora a su solicitud o incluyó más de una bitácora o bien, ésta no tiene el nombre correcto. Recuerde que, según el tipo de operación, el nombre de la bitácora debe empezar con BCA, BCP o BC40 (consulte la circular para más detalles)."
             raise Exception(excepcion)
         # acá va la paarte tediosa de esta función, para cada tipo de operación, debemos validar que la suma de anexos por tipo de archivo sea la indicada en la circular
-        # dada la extensión, no comentaré, cualquier cosa, escribir a b@imss.gob
+        # dada la extensión, no comentaré, cualquier cosa, escribir al administrador
         if tipo_operacion.lower() in ["cda01", "cda02"]:
             if len(attachments) >= 3:
                 tipo_archivos = Counter([x.content_type for x in attachments])
@@ -263,8 +452,8 @@ def validar_anexos(
                     and tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -311,8 +500,8 @@ tipo_archivos.get(
                     and tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -404,8 +593,8 @@ tipo_archivos.get(
                     and tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -446,8 +635,8 @@ tipo_archivos.get(
                     and tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -526,8 +715,8 @@ tipo_archivos.get(
                     + tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -540,14 +729,14 @@ tipo_archivos.get(
                 ):
                     return True, None, bitacora
                 else:
-                    excepcion = "Debe incluir la bitácora de control en formato excel, las capturas de pantalla de SINDO del F# (2 imágenes) y la cuenta individual filtrada por registro patronal original certificada (en formato pdf o como imagen)."
+                    excepcion = "Debe incluir la bitácora de control en formato excel, las capturas de pantalla de SINDO del F7 y F3 (2 imágenes) y la cuenta individual filtrada por registro patronal original certificada (en formato pdf o como imagen)."
                     raise Exception(excepcion)
             else:
                 if (
                     f"{asunto.lower()}" not in cuerpo.lower()
                     or "file://" not in cuerpo.lower()
                 ):
-                    excepcion = f"Debe incluir 4 anexos, la bitácora de control en formato excel, las capturas de pantalla de SINDO del F# (2 imágenes) y la cuenta individual filtrada por registro patronal original certificada (en formato pdf o como imagen). {nota_carpeta}"
+                    excepcion = f"Debe incluir 4 anexos, la bitácora de control en formato excel, las capturas de pantalla de SINDO del F7 y F3 (2 imágenes) y la cuenta individual filtrada por registro patronal original certificada (en formato pdf o como imagen). {nota_carpeta}"
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
@@ -620,8 +809,8 @@ tipo_archivos.get(
                     + tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -634,14 +823,14 @@ tipo_archivos.get(
                 ):
                     return True, None, bitacora
                 else:
-                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División y Escrito Patronal) y un archivo DISPM.txt por cada registro patronal (al menos 1)"
+                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División de Afiliación a Régimen Obligatorio y Escrito Patronal) y un archivo DISPMAG.txt por cada registro patronal (al menos 1)"
                     raise Exception(excepcion)
             else:
                 if (
                     f"{asunto.lower()}" not in cuerpo.lower()
                     or "file://" not in cuerpo.lower()
                 ):
-                    excepcion = f"Debe incluir al menos 4 archivos adjuntos, un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División y Escrito Patronal) y un archivo .txt por cada registro patronal (al menos 1). {nota_carpeta}"
+                    excepcion = f"Debe incluir al menos 4 archivos adjuntos, un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División de Afiliación a Régimen Obligatorio y Escrito Patronal) y un archivo .txt por cada registro patronal (al menos 1). {nota_carpeta}"
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
@@ -679,14 +868,14 @@ tipo_archivos.get(
                 ):
                     return True, None, bitacora
                 else:
-                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control), 3 pdf's o imágenes (Oficio de petición a la División, Reporte de juicio concluído o instrucción en materia de afiliación de la Jefatura de SJ y certificación de pagos, emitida por la jefatura de depto) y un archivo .txt (DISPM.txt)"
+                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control), 3 pdf's o imágenes (Oficio de petición a la División de Afiliación a Régimen Obligatorio, Reporte de juicio concluído o instrucción en materia de afiliación de la Jefatura de Servicios Jurídicos y certificación de pagos, emitida por la jefatura de departamento de cobranza) y un archivo .txt (DISPMAG.txt)"
                     raise Exception(excepcion)
             else:
                 if (
                     f"{asunto.lower()}" not in cuerpo.lower()
                     or "file://" not in cuerpo.lower()
                 ):
-                    excepcion = f"Debe incluir 5 archivos, un archivo en formato excel (bitácora de control), 3 pdf's o imágenes (Oficio de petición a la División, Reporte de juicio concluído o instrucción en materia de afiliación de la Jefatura de SJ y certificación de pagos) y un archivo .txt (DISPM.txt). {nota_carpeta}"
+                    excepcion = f"Debe incluir 5 archivos, un archivo en formato excel (bitácora de control), 3 pdf's o imágenes (Oficio de petición a la División de Afiliación a Régimen Obligatorio, Reporte de juicio concluído o instrucción en materia de afiliación de la Jefatura de Servicios Jurídicos y certificación de pagos) y un archivo .txt (DISPMAG.txt). {nota_carpeta}"
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
@@ -775,14 +964,14 @@ tipo_archivos.get(
                 ):
                     return True, None, bitacora
                 else:
-                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División 2 y el Escrito Patronal) y un archivo .txt (DISPM.txt)"
+                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División de Incorporación Voluntaria y Convenios y el Escrito Patronal) y un archivo .txt (DISPMAG.txt)"
                     raise Exception(excepcion)
             else:
                 if (
                     f"{asunto.lower()}" not in cuerpo.lower()
                     or "file://" not in cuerpo.lower()
                 ):
-                    excepcion = f"Debe incluir 4 archivos, un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División 2 y el Escrito Patronal) y un archivo .txt (DISPM.txt). {nota_carpeta}"
+                    excepcion = f"Debe incluir 4 archivos, un archivo en formato excel (bitácora de control), 2 pdf's o imágenes (Oficio de petición a la División de Incorporación Voluntaria y Convenios y el Escrito Patronal) y un archivo .txt (DISPMAG.txt). {nota_carpeta}"
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
@@ -810,10 +999,11 @@ tipo_archivos.get(
                     + tipo_archivos.get(
                         "image/png",
                         0,
-                    ) + tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/octet-stream",
                         0,
-                    ) 
+                    )
                     >= 3
                 ):
                     return True, None, bitacora
@@ -854,8 +1044,8 @@ tipo_archivos.get(
                     + tipo_archivos.get(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         0,
-                    ) +
-tipo_archivos.get(
+                    )
+                    + tipo_archivos.get(
                         "application/msword",
                         0,
                     )
@@ -896,18 +1086,18 @@ tipo_archivos.get(
         else:
             return False, e, None
 
+
 # función que envía correo de respuesta al subdelegado, bien informando que se envío a proceso o que se rechazó su solicitud (explicando las razones de rechazo)
-def correo_respuesta(exito:bool,excepciones:str, destinatario:str, asunto_original:str)->None:
-    port=1025
+def correo_respuesta(
+    exito: bool, excepciones: str, destinatario: str, asunto_original: str
+) -> None:
     msg = MIMEMultipart("related")
-    msg['From'] = correo
-    #sender = 'b@imss.gob'
-    sender = correo
-    msg['To'] = destinatario
+    msg["From"] = EMAIL_MAILBOX
+    sender = EMAIL_MAILBOX
+    msg["To"] = destinatario
     receiver = destinatario
     if not exito:
-        msg['Subject'] = f'Error al procesar - {asunto_original}'
-
+        msg["Subject"] = f"Error al procesar - {asunto_original}"
 
         cuerpo_correo = f"""
             Estimado o estimada,
@@ -916,14 +1106,15 @@ def correo_respuesta(exito:bool,excepciones:str, destinatario:str, asunto_origin
 
             Quedamos a la espera de las correcciones para poder procesar el movimiento.
         """
+        ruta_Circular = URL_CIRCULAR
         html = f"""\
         <html>
         <body>
                 <p>Estimado o estimada,<br></p>
                 <p>Recibimos su correo con el identificador {asunto_original}, éste no pudo ser procesado, debido a las siguientes razones:</p>
                 <ol>{excepciones}</ol>
-                <p>A este correo le han sido adjuntados el oficio circular con las instrucciones a seguir y las plantillas.</p>
-                <p>Si tiene dudas, puede escribir un correo a X Y Z (c@imss.gob).</p>
+                <p>Puede <a href={ruta_Circular}> descargar aquí el oficio circular y las plantillas</a> con las instrucciones a seguir.</p>
+                <p>Si tiene dudas, puede escribir un correo a {EMAIL_DUDAS}</p>
                 <p>
                     Cordiales saludos.
                 </p>
@@ -933,15 +1124,9 @@ def correo_respuesta(exito:bool,excepciones:str, destinatario:str, asunto_origin
         """
         part2 = MIMEText(html, "html")
         msg.attach(part2)
-        part = MIMEBase('application', "octet-stream")
-        part.set_payload(open(f"{path}/folder/Circular.zip", "rb").read())
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f'attachment; filename="Circular.zip"')
-        msg.attach(part)
 
     elif exito:
-        msg['Subject'] = f'Éxito al procesar - {asunto_original}'
-
+        msg["Subject"] = f"Éxito al procesar - {asunto_original}"
 
         cuerpo_correo = f"""
             Estimado o estimada,
@@ -961,33 +1146,30 @@ def correo_respuesta(exito:bool,excepciones:str, destinatario:str, asunto_origin
         """
         part2 = MIMEText(html, "html")
         msg.attach(part2)
-    # Usamos un servidor de D que tenemos en la X para conectarnos
-    with smtplib.SMTP('3.3.3.3', port) as server:
-        server.login(correo, password)
+
+    with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
+        server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
         server.sendmail(sender, receiver, msg.as_string())
+
 
 # correo que confirma a le operadore que se marcó como atendida la solicitud indicada
 def correo_respuesta_atencion(exito, destinatario, asunto):
-    port=3
     msg = MIMEMultipart("related")
-    msg['From'] = correo
-    #sender = 'b@imss.gob'
-    sender = correo
-    msg['To'] = destinatario
+    msg["From"] = EMAIL_MAILBOX
+    sender = EMAIL_MAILBOX
+    msg["To"] = destinatario
     receiver = destinatario
     if not exito:
-        msg['Subject'] = f'Error al marcar como atendido - {asunto}'
-    
-    
+        msg["Subject"] = f"Error al marcar como atendido - {asunto}"
+
         html = f"""
             <p>Estimado o estimada,</p>
             <p>Recibimos su correo con el identificador {asunto}, éste no pudo ser marcado como atendido. O bien no pudimos identificar un ID válido en el asunto o esta solicitud ya había sido marcada como completa.</p>    
             <br><p>Quedamos a la espera de las correcciones para poder procesar el movimiento.</p><br><br><br>
         """
     elif exito:
-        msg['Subject'] = f'Éxito al marcar como atendido - {asunto}'
-    
-    
+        msg["Subject"] = f"Éxito al marcar como atendido - {asunto}"
+
         html = f"""
             Estimado o estimada,
             Recibimos su correo con el identificador {asunto}, éste fue marcado exitosamente como atendido.
@@ -996,34 +1178,46 @@ def correo_respuesta_atencion(exito, destinatario, asunto):
             """
     part2 = MIMEText(html, "html")
     msg.attach(part2)
-    with smtplib.SMTP('3.3.3.3', port) as server:
-        server.login(correo, password)
+    with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
+        server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
         server.sendmail(sender, receiver, msg.as_string())
+
 
 # función para reenviar las solicitudes a le operadore asignade
-def correo_atender(mensaje:EmailMessage, id_mensaje:str, tipo_operacion:str, enviado_por:str):
-    port=4
-    df_responsable = df_usuarios.loc[df_usuarios.cve_solicitud.str.lower() == tipo_operacion.lower()].reset_index(drop=True).iloc[0]
-    responsable = df_responsable['responsable']
+def correo_atender(
+    mensaje: EmailMessage, id_mensaje: str, tipo_operacion: str, enviado_por: str
+):
+    df_responsable = (
+        df_usuarios.loc[df_usuarios.cve_solicitud.str.lower() == tipo_operacion.lower()]
+        .reset_index(drop=True)
+        .iloc[0]
+    )
+    responsable = df_responsable["responsable"]
     msg = mensaje
-    msg['CC'] = [df_responsable["ccp_1"], df_responsable["ccp_2"]]
-    for key in [x for x in msg.keys() if x not in ["Subject","Content-Type","MIME-Version","X-MS-Has-Attach"]]:
+    msg["CC"] = [df_responsable["ccp_1"], df_responsable["ccp_2"]]
+    for key in [
+        x
+        for x in msg.keys()
+        if x not in ["Subject", "Content-Type", "MIME-Version", "X-MS-Has-Attach"]
+    ]:
         del msg[key]
-    msg['From'] = correo
-    sender = correo
-    msg['To'] = f"{responsable},{df_responsable['ccp_1']},{df_responsable['ccp_2']}"
+    msg["From"] = EMAIL_MAILBOX
+    sender = EMAIL_MAILBOX
+    msg["To"] = f"{responsable},{df_responsable['ccp_1']},{df_responsable['ccp_2']}"
     asunto_orig = msg["Subject"]
     del msg["Subject"]
-    msg["Subject"] = f'A atender: {id_mensaje} - Enviado por: {enviado_por}'
+    msg["Subject"] = f"A atender: {id_mensaje} - Enviado por: {enviado_por}"
     del msg["Received"]
-    receiver = [responsable, df_responsable['ccp_1'],df_responsable['ccp_2']]
-    with smtplib.SMTP('3.3.3.3', port) as server:
-        server.login(correo, password)
+    receiver = [responsable, df_responsable["ccp_1"], df_responsable["ccp_2"]]
+    with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
+        server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
         server.sendmail(sender, receiver, msg.as_string())
 
-def limpiar_carpeta(carpeta:str='Sent'):
-    mailbox = MailBox('localhost', port=0, ssl_context = ssl._create_unverified_context()).login('a@imss.gob', password)
+
+def limpiar_carpeta(carpeta: str = "Sent"):
+    mailbox = MailBox(
+        "localhost", port=PORT_MAILBOX, ssl_context=ssl._create_unverified_context()
+    ).login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
     mailbox.folder.set(carpeta)
     enviados = [x.uid for x in mailbox.fetch()]
     mailbox.delete(enviados)
-     

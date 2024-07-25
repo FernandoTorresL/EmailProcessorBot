@@ -281,3 +281,4 @@ $RECYCLE.BIN/
 
 *.code-workspace
 credenciales.py
+logfile.log

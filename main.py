@@ -2,22 +2,38 @@ from helpers import *
 
 # Nos conectamos a la bandeja (otra vez con Davmail)
 mailbox = MailBox(
-    "0.0.0.0", port=0, ssl_context=ssl._create_unverified_context()
-).login("a@imss.gob", password)
-mailbox.folder.set("INBOX")
-for msg in mailbox.fetch():
-    # primero validamos que el correo venga de un remitente @imss.gob, si sí, lo almacenamos 
-    if "@imss.gob" in msg.from_:
+    IP_MAILBOX, port=PORT_MAILBOX, ssl_context=ssl._create_unverified_context()
+).login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
+
+mailbox.folder.set(FOLDER_MAILBOX)
+
+for msg in mailbox.fetch(limit=MSG_LIMIT, reverse=False):
+    # primero validamos que el correo venga de un remitente @imss.gob, si sí, lo almacenamos
+    if DOMINIO_MAILBOX in msg.from_:
         try:
             # limpiamos el asunto
-            asunto = msg.subject.strip().replace("RV: ","").replace("RE: ","").replace('_','-').replace(' ','')
+            asunto = (
+                msg.subject.strip()
+                .replace("RV: ", "")
+                .replace("RE: ", "")
+                .replace("_", "-")
+                .replace("<", "")
+                .replace(">", "")
+                .replace(" ", "")
+            )
         except Exception:
             asunto = msg.subject.strip()
         # guardamos el archivo
+
+        filename = (
+            f"{msg.date}-{asunto.replace('\r\n', '').replace('"', '')}.eml".strip()
+            .replace(" ", "-")
+            .replace(":", "")
+            .replace("/", "-")
+        )
+
         with open(
-            f'./archivo/{msg.date}-{asunto.replace("/","-")}.elm'.strip().replace(
-                " ", "-"
-            ),
+            f"{PATH_ARCHIVO}/{filename}",
             "w+",
         ) as out:
             gen = email.generator.Generator(out)
@@ -30,8 +46,11 @@ for msg in mailbox.fetch():
                     try:
                         tipo_operacion = asunto.split("-")[2]
                     except Exception:
-                        # mailbox.move(f"{msg.uid}", "NO-SOLICITUDES")
+                        excepcion_asunto = "Asunto inválido"
+                        excepcion_anexos = excepcion_cuerpo = ""
+                        # print(f"SOL. NO VALIDA de: {msg.from_} | Asunto inválido: {asunto} ")
                         raise Exception(f"Asunto {asunto} no válido")
+                    #
                     # cuerpo_correo = msg.text.split("Enviado el:")[0]
                     # evaluamos el asunto, cuerpo y anexos, en orden, si hay excepciones en alguno, las guardamos
                     asunto_valido, excepcion_asunto = validar_asunto(asunto=asunto)
@@ -66,37 +85,28 @@ for msg in mailbox.fetch():
                             "sujeto": asunto.split("-")[3],
                         }
                         # movemos el archivo a la carpeta /SOLICITUDES VALIDAS/ y enviamos los correos de respuesta y atención
-                        mailbox.move(f"{msg.uid}", "SOLICITUDES VALIDAS")
+                        mailbox.move(f"{msg.uid}", "INBOX/SOLICITUDES VALIDAS")
+                        print("SOL. VALIDA: ", asunto)
                         correo_respuesta(True, "", msg.from_, asunto)
                         # inseramos en la bd
-                        col_solicitudes.insert_one(mongo_object)
+                        # col_solicitudes.insert_one(mongo_object)
                         col_solicitudes2.insert_one(mongo_object)
                         # le ponemos fecha y asunto a la bitácora y la insertamos
                         bitacora["asunto"] = asunto
                         bitacora["fecha"] = msg.date
-                        col_bitacora.insert_many(bitacora.to_dict('records'))
+                        # col_bitacora.insert_many(bitacora.to_dict("records"))
                         col_bitacora2.insert_many(bitacora.to_dict("records"))
 
                         correo_atender(msg.obj, asunto, tipo_operacion, msg.from_)
                     else:
-                        # mailbox.move(f"{msg.uid}", "NO-SOLICITUDES")
+                        # mailbox.(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
+                        # print("SOL. NO VALIDA: ", asunto)
                         # print(', '.join([str(x) for x in [excepcion_asunto, excepcion_cuerpo, excepcion_anexos] if x is not None]))
-                        raise Exception(
-                            " ".join(
-                                [
-                                    f"<li>{str(x)}</li>"
-                                    for x in [
-                                        excepcion_asunto,
-                                        excepcion_cuerpo,
-                                        excepcion_anexos,
-                                    ]
-                                    if x is not None
-                                ]
-                            )
-                        )
+                        raise Exception(" ".join([f"<li>{str(x)}</li>" for x in [excepcion_asunto, excepcion_cuerpo, excepcion_anexos] if x is not None]))
                 except Exception as e:
                     # print(e)
-                    mailbox.move(f"{msg.uid}", "NO-SOLICITUDES")
+                    mailbox.move(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
+                    print("SOL. NO VALIDA: ", asunto)
                     correo_respuesta(False, e, msg.from_, asunto)
                     mongo_object = {
                         "fecha": msg.date,
@@ -110,14 +120,14 @@ for msg in mailbox.fetch():
                     }
                     # insertamos el error en otra colección de la BD
                     col_errores.insert_one(mongo_object)
-                    # correo_respuesta(False, e, "b@imss.gob", asunto)
             elif (
                 msg.from_
-                == "M@imss.gob"
+                == EMAIL_MICROSOFT
             ):
                 # los correos de buzón lleno, los eliminamos
-                print("buzon lleno")
-                mailbox.delete(f"{msg.uid}")
+                print(f"buzon lleno {msg.text[:150].replace("\r\n", " ")}")
+                mailbox.move(f"{msg.uid}", "INBOX/TMP")
+                #mailbox.delete(f"{msg.uid}")
                 pass
             else:
                 try:
@@ -125,11 +135,11 @@ for msg in mailbox.fetch():
                         "Sólo el o la subdelegada y el o la encargada de la subdelegación pueden enviar correos a esta dirección."
                     )
                 except Exception as e:
-                    print("FUERA DE LISTA")
+                    print(f"Remitente FUERA DE LISTA {msg.from_}")
                     asunto = msg.subject.strip()
                     correo_respuesta(False, e, msg.from_, asunto)
-                    # correo_respuesta(False, e, "b@imss.gob", asunto.strip().replace("\\r\\n","")[0:65])
-                    mailbox.move(f"{msg.uid}", "NO-SOLICITUDES")
+                    mailbox.move(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
+                    print("SOL. NO VALIDA: ", asunto)
 
         else:
             try:
@@ -138,7 +148,7 @@ for msg in mailbox.fetch():
                     .split(" - Enviado por:")[0]
                     .split(":")[-1]
                     .strip()
-                    .replace(" ","")
+                    .replace(" ", "")
                 )
                 operacion = asunto.split("-")[2]
                 solicitudes_usuario = pd.DataFrame(
@@ -179,16 +189,23 @@ for msg in mailbox.fetch():
                         "$set": {
                             "atendido": 1,
                             "atendido_por": msg.from_,
-                            "fecha_atencion": datetime.today(),
+                            "fecha_atencion": msg.date,
+                            # "fecha_atencion": datetime.today(),
                             "estatus": status,
                         }
                     },
                 )
-                mailbox.move(f"{msg.uid}", "ATENDIDOS")
+                mailbox.move(f"{msg.uid}", "INBOX/ATENDIDOS")
                 correo_respuesta_atencion(True, msg.from_, asunto)
             except Exception as e:
                 print(e)
-                correo_respuesta_atencion(False, "b@imss.gob", asunto)
+                mailbox.move(f"{msg.uid}", "INBOX/ERROR-AL-MARCAR")
+                print("ERROR AL MARCAR: ", asunto)
+                # correo_respuesta_atencion(False, EMAIL_ADMINISTRADOR, asunto)
+                correo_respuesta_atencion(False, msg.from_, asunto)
     else:
         print("no-imss")
+        mailbox.move(f"{msg.uid}", "Junk")
         pass
+
+print("No hay más mensajes. FIN")
