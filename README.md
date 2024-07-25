@@ -31,7 +31,7 @@ El proyecto fue construido usando:
 ### Clonar el repositorio
 
 ```sh
-git clone git@github.com:FernandoTorresL/EmailProcessorBot.git <my_folder> 
+git clone git@github.com:FernandoTorresL/EmailProcessorBot.git <my_folder>
 ```
 Opcionalmente puedes cambiar <my_folder> con el nombre de la carpeta de tu elección.
 
