@@ -1,6 +1,6 @@
-# Uso: 
+# Uso:
 # python dry_run.py --destinatario "ejemplo@imss.gob"
-# si no se proporciona ningún argumento, se envían los correos a b@imss.gob 
+# si no se proporciona ningún argumento, se envían los correos a b@imss.gob
 
 
 import argparse
@@ -8,17 +8,17 @@ import argparse
 from helpers import *
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--destinatario', '-d', help="Correo a enviar los mensajes de confirmación", type= str, nargs='?', const="b@imss.gob", default="b@imss.gob")
+parser.add_argument('--destinatario', '-d', help="Correo a enviar los mensajes de confirmación", type= str, nargs='?', const=EMAIL_ADMINISTRADOR, default=EMAIL_ADMINISTRADOR)
 args=parser.parse_args()
 
 # Nos conectamos a la bandeja (otra vez con Davmail)
 mailbox = MailBox(
-    "0.0.0.0", port=0, ssl_context=ssl._create_unverified_context()
-).login("a@imss.gob", password)
+    IP_MAILBOX, port=PORT_MAILBOX, ssl_context=ssl._create_unverified_context()
+).login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
 mailbox.folder.set("INBOX")
 for msg in mailbox.fetch():
     # primero validamos que el correo venga de un remitente @imss.gob, si sí, lo almacenamos 
-    if "@imss.gob" in msg.from_:
+    if DOMINIO_MAILBOX in msg.from_:
         try:
             # limpiamos el asunto
             asunto = msg.subject.strip().replace("RV: ","").replace("RE: ","").replace('_','-').replace(' ','')
@@ -99,10 +99,10 @@ for msg in mailbox.fetch():
                     # insertamos el error en otra colección de la BD
             elif (
                 msg.from_
-                == "M@imss.gob"
+                == EMAIL_MICROSOFT
             ):
                 # los correos de buzón lleno, los eliminamos
-                #mailbox.delete(f"{msg.uid}")
+                # mailbox.delete(f"{msg.uid}")
                 pass
             else:
                 try:
@@ -119,7 +119,7 @@ for msg in mailbox.fetch():
                     .split(" - Enviado por:")[0]
                     .split(":")[-1]
                     .strip()
-                    .replace(" ","")
+                    .replace(" ", "")
                 )
                 operacion = asunto.split("-")[2]
                 solicitudes_usuario = pd.DataFrame(

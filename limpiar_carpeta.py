@@ -1,10 +1,10 @@
-# Uso: 
+# Uso:
 # python limpiar_carpeta.py --carpeta "CARPETA A VACIAR"
 # si no se proporciona ningún argumento, se vacía la carpeta de elementos enviados
 
-from helpers import limpiar_carpeta
-
 import argparse
+
+from helpers import limpiar_carpeta
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--carpeta', '-c', help="Carpeta a despejar", type= str, nargs='?', const="Sent", default="Sent")
