@@ -281,4 +281,8 @@ $RECYCLE.BIN/
 
 *.code-workspace
 credenciales.py
+Destinatarios*.csv
+Directorio Nacional Subdelegados*.csv
 logfile.log
+archivo*/
+*.sh
