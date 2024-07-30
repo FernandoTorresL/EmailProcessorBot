@@ -1,13 +1,41 @@
+import email
 # bueno, ya intenté varias y parece que la más sencilla es IMAPTOOLS
 import imaplib
+import mimetypes
+import re
+import smtplib
 import socket
 import ssl
+import string
 import time
 import traceback
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from email import encoders
+from email.message import EmailMessage
+from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import make_msgid
+from io import BytesIO, StringIO
 
+import pandas as pd
+import smbclient
 from imap_tools import AND, A, MailBox, MailboxLoginError, MailboxLogoutError
 # establecemos conexión con PyMongo
 from pymongo import MongoClient
+from tqdm import tqdm
+from unidecode import unidecode
+
+from credenciales import (BITACORA_SIZE, DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR,
+                          EMAIL_DUDAS, EMAIL_MAILBOX, EMAIL_MICROSOFT,
+                          FOLDER_MAILBOX, IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP,
+                          MSG_LIMIT, PASSWORD_MAILBOX, PATH_ARCHIVO,
+                          PORT_MAILBOX, PORT_SMTP, PWD_MONGO, URL_CIRCULAR,
+                          USER_NAME_MONGO)
+# archivo que contiene la lista de las subdelegaciones válidas
+from cves_subdelegacion import cves_subdel
 
 conn_nvo = MongoClient(
     IP_MONGO_CLIENT,
@@ -47,34 +75,6 @@ cves_solicitud = [
     "PTI",
     "CDA00",
 ]
-import email
-import mimetypes
-import re
-import smtplib
-import string
-from collections import Counter
-from datetime import datetime, timedelta, timezone
-from email import encoders
-from email.message import EmailMessage
-from email.mime.base import MIMEBase
-from email.mime.image import MIMEImage
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import make_msgid
-from io import BytesIO, StringIO
-
-import pandas as pd
-import smbclient
-from tqdm import tqdm
-from unidecode import unidecode
-
-from credenciales import (DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR, EMAIL_DUDAS,
-                          EMAIL_MAILBOX, EMAIL_MICROSOFT, FOLDER_MAILBOX,
-                          IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
-                          PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
-                          PORT_SMTP, PWD_MONGO, URL_CIRCULAR, USER_NAME_MONGO)
-# archivo que contiene la lista de las subdelegaciones válidas
-from cves_subdelegacion import cves_subdel
 
 # path de ejecución, ACTUALIZAR
 path = "."
@@ -130,7 +130,7 @@ def regex_operaciones(tipo_operacion: str, value: str) -> bool:
                 or re.match(r"^[a-zA-Z0-9]{11}$", value)
             )
         elif tipo_operacion.upper() == "MOD40":
-            excepcion = "La fecha debe de estar en el formato dd/mm/yyyy"
+            excepcion = "Asunto incorrecto: La fecha debe de estar en el formato dd/mm/yyyy"
             res = re.match(r"^(0[1-9]|[1-2][0-9]|3[0-1])/(0[1-9]|1[0-2])/\d{4}$", value)
         if res:
             return True, None
@@ -417,7 +417,7 @@ def validar_anexos(
             )
             #if (bitacora.shape[0] > 10) or (bitacora.shape[1] > 9):
             print(f"Tamaño bitacora para {asunto}:{bitacora.shape}")
-            if bitacora.shape[0] > 49:
+            if bitacora.shape[0] > BITACORA_SIZE:
                excepcion = "La bitácora parece exceder de tamaño. No incluir toda la historia de su bitácora, enviar sólo el renglón correspondiente a la petición de su correo. O puede ser que inadvertidamente haya agregado/modificado renglones/columnas vacías. Revise la cantidad de filas o columnas."
                print(f"Excepcion para {asunto}: {excepcion}")
                raise Exception(excepcion)
