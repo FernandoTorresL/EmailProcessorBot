@@ -29,6 +29,7 @@ from tqdm import tqdm
 from unidecode import unidecode
 
 from credenciales import (BITACORA_SIZE, DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR,
+                          EMAIL_ASUNTO_ASIGNADO_OK, EMAIL_ASUNTO_ERROR,
                           EMAIL_DUDAS, EMAIL_MAILBOX, EMAIL_MICROSOFT,
                           FOLDER_MAILBOX, IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP,
                           MSG_LIMIT, PASSWORD_MAILBOX, PATH_ARCHIVO,
@@ -1069,7 +1070,7 @@ def validar_anexos(
                 else:
                     return True, None, bitacora
         else:
-            excepcion = f"Tipo de operación {tipo_operacion} inválida. Revise el título de su correo."
+            excepcion = f"Tipo de operación {tipo_operacion} inválida. Revise el asunto de su correo."
             raise Exception(excepcion)
         # ya validamos tipo y número de anexos, ahora validamos en otra función la bitácora
     # si no hay bitácora o no cumple con requisitos, vemos si tiene carpeta compartida
@@ -1097,23 +1098,16 @@ def correo_respuesta(
     msg["To"] = destinatario
     receiver = destinatario
     if not exito:
-        msg["Subject"] = f"Error al procesar - {asunto_original}"
-
-        cuerpo_correo = f"""
-            Estimado o estimada,
-            Recibimos su correo con el identificador {asunto_original}, éste no pudo ser procesado, debido a las siguientes razones:
-            {excepciones}
-
-            Quedamos a la espera de las correcciones para poder procesar el movimiento.
-        """
+        # Error al procesar
+        msg["Subject"] = f"{EMAIL_ASUNTO_ERROR} - {asunto_original}"
         ruta_Circular = URL_CIRCULAR
         html = f"""\
         <html>
         <body>
                 <p>Estimado o estimada,<br></p>
-                <p>Recibimos su correo con el identificador {asunto_original}, éste no pudo ser procesado, debido a las siguientes razones:</p>
+                <p>Recibimos su correo con el identificador {asunto_original} pero no pudo ser asignado a un responsable para iniciar su atención, debido a las siguientes razones:</p>
                 <ol>{excepciones}</ol>
-                <p>Puede <a href={ruta_Circular}> descargar aquí el oficio circular y las plantillas</a> con las instrucciones a seguir.</p>
+                <p>Puede <a href={ruta_Circular}> descargar aquí el Oficio Circular y las plantillas</a> con las instrucciones a seguir.</p>
                 <p>Si tiene dudas, puede escribir un correo a {EMAIL_DUDAS}</p>
                 <p>
                     Cordiales saludos.
@@ -1126,18 +1120,13 @@ def correo_respuesta(
         msg.attach(part2)
 
     elif exito:
-        msg["Subject"] = f"Éxito al procesar - {asunto_original}"
-
-        cuerpo_correo = f"""
-            Estimado o estimada,
-            Recibimos su correo con el identificador {asunto_original}, éste fue enviado a revisión de manera exitosa.
-
-        """
+        # Éxito al procesar
+        msg["Subject"] = f"{EMAIL_ASUNTO_ASIGNADO_OK} - {asunto_original}"
         html = f"""\
         <html>
         <body>
                 <p>Estimado o estimada,<br></p>
-                <p>Recibimos su correo con el identificador {asunto_original}, éste fue enviado a revisión de manera exitosa.</p>
+                <p>Recibimos su correo con el identificador {asunto_original} y fue enviado a revisión de manera exitosa.</p>
                 <p>
                     Cordiales saludos.
                 </p>
@@ -1164,17 +1153,17 @@ def correo_respuesta_atencion(exito, destinatario, asunto):
 
         html = f"""
             <p>Estimado o estimada,</p>
-            <p>Recibimos su correo con el identificador {asunto}, éste no pudo ser marcado como atendido. O bien no pudimos identificar un ID válido en el asunto o esta solicitud ya había sido marcada como completa.</p>    
-            <br><p>Quedamos a la espera de las correcciones para poder procesar el movimiento.</p><br><br><br>
+            <p>Recibimos su correo con el identificador {asunto}, pero no pudo ser marcado como atendido. O bien no pudimos identificar un ID válido en el asunto o esta solicitud ya había sido marcada como completa.</p>
+            <p>Quedamos a la espera de las correcciones, si es el caso, para poder marcar el movimiento.</p>
         """
     elif exito:
         msg["Subject"] = f"Éxito al marcar como atendido - {asunto}"
 
         html = f"""
-            Estimado o estimada,
-            Recibimos su correo con el identificador {asunto}, éste fue marcado exitosamente como atendido.
-<br>
-            Gracias y buen día.<br><br><br>
+            <p>Estimado o estimada,</p>
+            <p>Recibimos su correo con el identificador {asunto} y fue marcado exitosamente como atendido.</p>
+
+            <p>Gracias y buen día.</p>
             """
     part2 = MIMEText(html, "html")
     msg.attach(part2)

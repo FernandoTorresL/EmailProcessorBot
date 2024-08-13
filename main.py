@@ -20,13 +20,18 @@ try:
                     .replace("<", "")
                     .replace(">", "")
                     .replace(" ", "")
+                    .replace("|", "")
                 )
             except Exception:
                 asunto = msg.subject.strip()
             # guardamos el archivo
 
+            nombre_filename = msg.subject.strip()
+            nombre_filename = nombre_filename.replace('\r\n', '')
+            nombre_filename = nombre_filename.replace('"', '')
+            nombre_filename = nombre_filename.replace('|', '')
             filename = (
-                f"{msg.date}-{asunto.replace('\r\n', '').replace('"', '')}.eml".strip()
+                f"{msg.date}-{nombre_filename}.eml".strip()
                 .replace(" ", "-")
                 .replace(":", "")
                 .replace("/", "-")
