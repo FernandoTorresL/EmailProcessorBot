@@ -28,6 +28,8 @@ try:
 
             nombre_filename = msg.subject.strip()
             nombre_filename = nombre_filename.replace('\r\n', '')
+            nombre_filename = nombre_filename.replace('\t', '')
+            nombre_filename = nombre_filename.replace('--', '')
             nombre_filename = nombre_filename.replace('"', '')
             nombre_filename = nombre_filename.replace('|', '')
             filename = (
@@ -79,14 +81,14 @@ try:
                             # preparamos el objeto a insertar en la bd
                             mongo_object = {
                                 "fecha": msg.date,
-                                "asunto": asunto,
+                                "asunto": asunto.upper(),
                                 "remitente": msg.from_,
                                 "len_msg": len(msg.text),
                                 "atendido_por": usuario_atencion,
                                 "atendido": 0,
                                 "delegacion": asunto.split("-")[0],
                                 "subdelegacion": asunto.split("-")[1],
-                                "operacion": asunto.split("-")[2],
+                                "operacion": asunto.split("-")[2].upper(),
                                 "sujeto": asunto.split("-")[3],
                             }
                             # movemos el archivo a la carpeta /SOLICITUDES VALIDAS/ y enviamos los correos de respuesta y atención
@@ -115,7 +117,7 @@ try:
                         correo_respuesta(False, e, msg.from_, asunto)
                         mongo_object = {
                             "fecha": msg.date,
-                            "asunto": asunto,
+                            "asunto": asunto.upper(),
                             "remitente": msg.from_,
                             "len_msg": len(msg.text),
                             "excepcion_asunto": str(excepcion_asunto),
@@ -130,7 +132,8 @@ try:
                     == EMAIL_MICROSOFT
                 ):
                     # los correos de buzón lleno, los eliminamos
-                    print(f"buzon lleno {msg.text[:150].replace("\r\n", " ")}")
+                    mensaje_buzon_lleno = msg.text[:150].replace('\r\n', '')
+                    print(f"buzon lleno {mensaje_buzon_lleno}")
                     mailbox.move(f"{msg.uid}", "INBOX/TMP")
                     #mailbox.delete(f"{msg.uid}")
                     pass
@@ -155,11 +158,11 @@ try:
                         .strip()
                         .replace(" ", "")
                     )
-                    operacion = asunto.split("-")[2]
+                    operacion = asunto.split("-")[2].upper()
                     solicitudes_usuario = pd.DataFrame(
                         col_solicitudes2.find(
                             {
-                                "operacion": operacion,
+                                "operacion": { "$regex": operacion, "$options": "i" },
                                 "$or": [
                                     {"estatus": {"$in": ["Parcial", "Rechazado"]}},
                                     {"atendido": 0},
@@ -173,7 +176,7 @@ try:
                     try:
                         id_update = (
                             solicitudes_usuario.loc[
-                                solicitudes_usuario.asunto == asunto.lower()
+                                solicitudes_usuario.asunto.str.lower() == asunto.lower()
                             ]
                             .head(1)["_id"]
                             .tolist()[0]

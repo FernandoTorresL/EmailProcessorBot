@@ -33,8 +33,8 @@ from credenciales import (BITACORA_SIZE, DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR,
                           EMAIL_DUDAS, EMAIL_MAILBOX, EMAIL_MICROSOFT,
                           FOLDER_MAILBOX, IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP,
                           MSG_LIMIT, PASSWORD_MAILBOX, PATH_ARCHIVO,
-                          PORT_MAILBOX, PORT_SMTP, PWD_MONGO, URL_CIRCULAR,
-                          USER_NAME_MONGO)
+                          PORT_MAILBOX, PORT_SMTP, PWD_MONGO,
+                          RPS_NO_PERMITIDOS, URL_CIRCULAR, USER_NAME_MONGO)
 # archivo que contiene la lista de las subdelegaciones válidas
 from cves_subdelegacion import cves_subdel
 
@@ -133,6 +133,9 @@ def regex_operaciones(tipo_operacion: str, value: str) -> bool:
         elif tipo_operacion.upper() == "MOD40":
             excepcion = "Asunto incorrecto: La fecha debe de estar en el formato dd/mm/yyyy"
             res = re.match(r"^(0[1-9]|[1-2][0-9]|3[0-1])/(0[1-9]|1[0-2])/\d{4}$", value)
+        elif value[:10].upper() in RPS_NO_PERMITIDOS:
+            excepcion = f"El registro patronal {value} no puede utilizarse para {tipo_operacion}"
+            res = False
         if res:
             return True, None
         else:
@@ -196,9 +199,16 @@ def validar_ops(cuerpo: str, tipo_operacion: str) -> [bool, str]:
                 and "dice" in cuerpo
                 and ("debe" in cuerpo and "decir" in cuerpo)
             ):
-                if ( ("tc11" in cuerpo) or ("tc 11" in cuerpo) or ("tc-11"in cuerpo) ):
+                if (
+                    ("histórico central" in cuerpo)
+                    or ("historico central" in cuerpo)
+                    or ("tc11" in cuerpo)
+                    or ("tc 11" in cuerpo)
+                    or ("tc-11" in cuerpo)
+                    or ("tc - 11" in cuerpo)
+                ):
                     raise Exception(
-                        "No puede referirse a TC11 en las solicitudes CDA07. Revise su solicitud y/o CIZ en tabla"
+                        "No puede referirse a TC11 o Histórico central en las solicitudes CDA07. Revise su solicitud y/o CIZ en tabla"
                     )
                 else:
                     return True, None
@@ -1080,8 +1090,14 @@ def validar_anexos(
         match = re.search(ip_pattern, cuerpo)
         if match:
             try:
-                bitacora = validar_bitacora_smb(msg.text)
+                if any(msg):
+                    bitacora = validar_bitacora_smb(msg.text)
+                else:
+                    bitacora = None
                 return True, None, bitacora
+            except NameError as e:
+                print(f"Excepcion general para: {asunto}")
+                return False, "No adjuntó la bitácora a su solicitud o incluyó más de una bitácora o bien, ésta no tiene el nombre correcto. Recuerde que, según el tipo de operación, el nombre de la bitácora debe empezar con BCA, BCP o BC40 (consulte la circular para más detalles).", None
             except Exception as e:
                 return False, e, None
         else:
@@ -1127,6 +1143,7 @@ def correo_respuesta(
         <body>
                 <p>Estimado o estimada,<br></p>
                 <p>Recibimos su correo con el identificador {asunto_original} y fue enviado a revisión de manera exitosa.</p>
+                <p><strong>Esto NO significa que su solicitud ya haya sido operada/solucionada/atendida, sino sólo asignada y reenviada a los responsables.</strong></p>
                 <p>
                     Cordiales saludos.
                 </p>
