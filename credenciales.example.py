@@ -13,7 +13,10 @@ PATH_ARCHIVO = './archivo'
 EMAIL_MICROSOFT = 'MicrosoftExchange1@imss.gob'
 EMAIL_ADMINISTRADOR = 'b@imss.gob'
 EMAIL_DUDAS = 'el Lic. X Y Z (x@imss.gob).'
+EMAIL_ASUNTO_ERROR = 'Error - mensaje'
+EMAIL_ASUNTO_ASIGNADO_OK = 'Asignado_OK - mensaje'
 URL_CIRCULAR = 'https://imss.com/url_resource'
+RPS_NO_PERMITIDOS = {"Y500000000", "0"}
 
 IP_MONGO_CLIENT = '5.6.7.8:2'
 USER_NAME_MONGO = 'demo_user_mongo'

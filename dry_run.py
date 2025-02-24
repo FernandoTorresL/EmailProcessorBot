@@ -56,14 +56,14 @@ for msg in mailbox.fetch():
                         # preparamos el objeto a insertar en la bd
                         mongo_object = {
                             "fecha": msg.date,
-                            "asunto": asunto,
+                            "asunto": asunto.upper(),
                             "remitente": msg.from_,
                             "len_msg": len(msg.text),
                             "atendido_por": usuario_atencion,
                             "atendido": 0,
                             "delegacion": asunto.split("-")[0],
                             "subdelegacion": asunto.split("-")[1],
-                            "operacion": asunto.split("-")[2],
+                            "operacion": asunto.split("-")[2].upper(),
                             "sujeto": asunto.split("-")[3],
                         }
                         correo_respuesta(True, "", args.destinatario, asunto)
