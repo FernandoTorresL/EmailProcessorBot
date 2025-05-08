@@ -9,7 +9,7 @@ try:
 
     for msg in mailbox.fetch(limit=MSG_LIMIT, reverse=False):
         # primero validamos que el correo venga de un remitente @imss.gob, si sí, lo almacenamos
-        if DOMINIO_MAILBOX in msg.from_:
+        if (DOMINIO_MAILBOX in msg.from_) and (BAD_MAIL_STRING not in msg.subject.strip()):
             try:
                 # limpiamos el asunto
                 asunto = (
@@ -164,7 +164,8 @@ try:
                             {
                                 "operacion": { "$regex": operacion, "$options": "i" },
                                 "$or": [
-                                    {"estatus": {"$in": ["Parcial", "Rechazado"]}},
+                                    {"estatus": {"$in": ["Parcial", "Rechazado",
+                                                         "Reasignado"]}},
                                     {"atendido": 0},
                                 ],
                             }

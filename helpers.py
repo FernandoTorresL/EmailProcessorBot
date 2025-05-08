@@ -28,13 +28,14 @@ from pymongo import MongoClient
 from tqdm import tqdm
 from unidecode import unidecode
 
-from credenciales import (BITACORA_SIZE, DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR,
-                          EMAIL_ASUNTO_ASIGNADO_OK, EMAIL_ASUNTO_ERROR,
-                          EMAIL_DUDAS, EMAIL_MAILBOX, EMAIL_MICROSOFT,
-                          FOLDER_MAILBOX, IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP,
-                          MSG_LIMIT, PASSWORD_MAILBOX, PATH_ARCHIVO,
-                          PORT_MAILBOX, PORT_SMTP, PWD_MONGO,
-                          RPS_NO_PERMITIDOS, URL_CIRCULAR, USER_NAME_MONGO)
+from credenciales import (BAD_MAIL_STRING, BITACORA_SIZE, DOMINIO_MAILBOX,
+                          EMAIL_ADMINISTRADOR, EMAIL_ASUNTO_ASIGNADO_OK,
+                          EMAIL_ASUNTO_ERROR, EMAIL_DUDAS, EMAIL_MAILBOX,
+                          EMAIL_MICROSOFT, FOLDER_MAILBOX, IP_MAILBOX,
+                          IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
+                          PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
+                          PORT_SMTP, PWD_MONGO, RPS_NO_PERMITIDOS,
+                          URL_CIRCULAR, USER_NAME_MONGO)
 # archivo que contiene la lista de las subdelegaciones válidas
 from cves_subdelegacion import cves_subdel
 
@@ -200,15 +201,19 @@ def validar_ops(cuerpo: str, tipo_operacion: str) -> [bool, str]:
                 and ("debe" in cuerpo and "decir" in cuerpo)
             ):
                 if (
-                    ("histórico central" in cuerpo)
-                    or ("historico central" in cuerpo)
+                    ("hitórico central" in cuerpo)
+                    or ("hitorico central" in cuerpo)
                     or ("tc11" in cuerpo)
                     or ("tc 11" in cuerpo)
                     or ("tc-11" in cuerpo)
                     or ("tc - 11" in cuerpo)
+                    or ("tc12" in cuerpo)
+                    or ("tc 12" in cuerpo)
+                    or ("tc-12" in cuerpo)
+                    or ("tc - 12" in cuerpo)
                 ):
                     raise Exception(
-                        "No puede referirse a TC11 o Histórico central en las solicitudes CDA07. Revise su solicitud y/o CIZ en tabla"
+                        "No puede referirse a TC11, TC12 o Histórico central en las solicitudes CDA07. Revise su solicitud y/o CIZ en tabla"
                     )
                 else:
                     return True, None
@@ -1031,7 +1036,50 @@ def validar_anexos(
                 else:
                     return True, None, bitacora
         elif tipo_operacion.lower() == "mod40":
-            return True, None, bitacora
+            if len(attachments) >= 1:
+                tipo_archivos = Counter([x.content_type for x in attachments])
+                if (
+                    tipo_archivos.get(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "application/vnd.ms-excel",
+                        0,
+                    )
+                    >= 1
+                    and tipo_archivos.get(
+                        "application/pdf",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "image/jpeg",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "image/png",
+                        0,
+                    )
+                    >= 0
+                    and tipo_archivos.get(
+                        "text/plain",
+                        0,
+                    )
+                    >= 1
+                ):
+                    return True, None, bitacora
+                else:
+                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control) y un archivo .txt (DISPMAG_MOD40_CA_DDMMAA.txt), donde DDMMAA se refiere a la fecha en formato DIA,MES,AÑO por ejemplo: DISPMAG_MOD40_CA_31122024.txt"
+                    raise Exception(excepcion)
+            else:
+                if (
+                    f"{asunto.lower()}" not in cuerpo.lower()
+                    or "file://" not in cuerpo.lower()
+                ):
+                    excepcion = f"Debe incluir dos archivos: un formato excel (bitácora de control) y otro .txt (DISPMAG_MOD40_CA_DDMMAA.txt), donde DDMMAA se refiere a la fecha en formato DIA,MES,AÑO (ejemplo: DISPMAG_MOD40_CA_31122024.txt). {nota_carpeta}"
+                    raise Exception(excepcion)
+                else:
+                    return True, None, bitacora
         elif tipo_operacion.lower() == "motivo7":
             return True, None, bitacora
         elif tipo_operacion.lower() == "cda00":
