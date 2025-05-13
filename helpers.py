@@ -1047,7 +1047,7 @@ def validar_anexos(
                         "application/vnd.ms-excel",
                         0,
                     )
-                    >= 1
+                    >= 2
                     and tipo_archivos.get(
                         "application/pdf",
                         0,
@@ -1065,18 +1065,18 @@ def validar_anexos(
                         "text/plain",
                         0,
                     )
-                    >= 1
+                    >= 0
                 ):
                     return True, None, bitacora
                 else:
-                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control) y un archivo .txt (DISPMAG_MOD40_CA_DDMMAA.txt), donde DDMMAA se refiere a la fecha en formato DIA,MES,AÑO por ejemplo: DISPMAG_MOD40_CA_31122024.txt"
+                    excepcion = "Debe incluir dos archivos en formato Excel: la bitácora de control y el archivo denominado 'Archivo_MOD40_XX_DDMMAA.xlsx', donde XX es la clave de la subdelegación a dos dígitos y DDMMAA se refiere a la fecha en formato DIA,MES,AÑO, por ejemplo: 'Archivo_MOD40_01_311224.xlsx'"
                     raise Exception(excepcion)
             else:
                 if (
                     f"{asunto.lower()}" not in cuerpo.lower()
                     or "file://" not in cuerpo.lower()
                 ):
-                    excepcion = f"Debe incluir dos archivos: un formato excel (bitácora de control) y otro .txt (DISPMAG_MOD40_CA_DDMMAA.txt), donde DDMMAA se refiere a la fecha en formato DIA,MES,AÑO (ejemplo: DISPMAG_MOD40_CA_31122024.txt). {nota_carpeta}"
+                    excepcion = f"Debe incluir dos archivos Excel: uno debe ser la bitácora de control y otro denominado 'Archivo_MOD40_XX_DDMMAA.xlsx', donde XX es la clave de la subdelegación a dos dígitos y DDMMAA se refiere a la fecha en formato DIA,MES,AÑO, por ejemplo: 'Archivo_MOD40_01_311224.xlsx' {nota_carpeta}"
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
