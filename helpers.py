@@ -30,9 +30,9 @@ from unidecode import unidecode
 
 from credenciales import (BAD_MAIL_STRING, BITACORA_SIZE, DOMINIO_MAILBOX,
                           EMAIL_ADMINISTRADOR, EMAIL_ASUNTO_ASIGNADO_OK,
-                          EMAIL_ASUNTO_ERROR, EMAIL_DUDAS, EMAIL_MAILBOX,
-                          EMAIL_MICROSOFT, FOLDER_MAILBOX, IP_MAILBOX,
-                          IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
+                          EMAIL_ASUNTO_ERROR, EMAIL_DUDAS, EMAIL_DUDAS_MOD40,
+                          EMAIL_MAILBOX, EMAIL_MICROSOFT, FOLDER_MAILBOX,
+                          IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
                           PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
                           PORT_SMTP, PWD_MONGO, RPS_NO_PERMITIDOS,
                           URL_CIRCULAR, USER_NAME_MONGO)
@@ -1047,7 +1047,7 @@ def validar_anexos(
                         "application/vnd.ms-excel",
                         0,
                     )
-                    >= 1
+                    >= 2
                     and tipo_archivos.get(
                         "application/pdf",
                         0,
@@ -1065,18 +1065,18 @@ def validar_anexos(
                         "text/plain",
                         0,
                     )
-                    >= 1
+                    >= 0
                 ):
                     return True, None, bitacora
                 else:
-                    excepcion = "Debe incluir un archivo en formato excel (bitácora de control) y un archivo .txt (DISPMAG_MOD40_CA_DDMMAA.txt), donde DDMMAA se refiere a la fecha en formato DIA,MES,AÑO por ejemplo: DISPMAG_MOD40_CA_31122024.txt"
+                    excepcion = "Debe incluir dos archivos en formato Excel: la bitácora de control y el archivo denominado 'Archivo_MOD40_XX_DDMMAA.xlsx', donde XX es la clave de la subdelegación a dos dígitos y DDMMAA se refiere a la fecha en formato DIA,MES,AÑO, por ejemplo: 'Archivo_MOD40_01_311224.xlsx'"
                     raise Exception(excepcion)
             else:
                 if (
                     f"{asunto.lower()}" not in cuerpo.lower()
                     or "file://" not in cuerpo.lower()
                 ):
-                    excepcion = f"Debe incluir dos archivos: un formato excel (bitácora de control) y otro .txt (DISPMAG_MOD40_CA_DDMMAA.txt), donde DDMMAA se refiere a la fecha en formato DIA,MES,AÑO (ejemplo: DISPMAG_MOD40_CA_31122024.txt). {nota_carpeta}"
+                    excepcion = f"Debe incluir dos archivos Excel: uno debe ser la bitácora de control y otro denominado 'Archivo_MOD40_XX_DDMMAA.xlsx', donde XX es la clave de la subdelegación a dos dígitos y DDMMAA se refiere a la fecha en formato DIA,MES,AÑO, por ejemplo: 'Archivo_MOD40_01_311224.xlsx' {nota_carpeta}"
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
@@ -1154,7 +1154,7 @@ def validar_anexos(
 
 # función que envía correo de respuesta al subdelegado, bien informando que se envío a proceso o que se rechazó su solicitud (explicando las razones de rechazo)
 def correo_respuesta(
-    exito: bool, excepciones: str, destinatario: str, asunto_original: str
+    exito: bool, excepciones: str, destinatario: str, asunto_original: str, operation: str
 ) -> None:
     msg = MIMEMultipart("related")
     msg["From"] = EMAIL_MAILBOX
@@ -1165,6 +1165,12 @@ def correo_respuesta(
         # Error al procesar
         msg["Subject"] = f"{EMAIL_ASUNTO_ERROR} - {asunto_original}"
         ruta_Circular = URL_CIRCULAR
+
+        if operation == "MOD40":
+            msg_dudas = EMAIL_DUDAS_MOD40
+        else:
+            msg_dudas = EMAIL_DUDAS
+
         html = f"""\
         <html>
         <body>
@@ -1172,7 +1178,7 @@ def correo_respuesta(
                 <p>Recibimos su correo con el identificador {asunto_original} pero no pudo ser asignado a un responsable para iniciar su atención, debido a las siguientes razones:</p>
                 <ol>{excepciones}</ol>
                 <p>Puede <a href={ruta_Circular}> descargar aquí el Oficio Circular y las plantillas</a> con las instrucciones a seguir.</p>
-                <p>Si tiene dudas, puede escribir un correo a {EMAIL_DUDAS}</p>
+                <p>Si tiene dudas, puede escribir un correo a {msg_dudas}</p>
                 <p>
                     Cordiales saludos.
                 </p>

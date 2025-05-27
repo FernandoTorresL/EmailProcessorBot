@@ -47,6 +47,7 @@ try:
                 gen.flatten(msg.obj)
             if "atendid" not in msg.subject.lower():
                 if msg.from_ in subdelegados:
+                    tipo_operacion = ""
                     try:
                         # la estrategia va a ser ésta, como IMAP no tiene ID's especificos por correo, vamos a generar una llave
                         # ésta está compuesta por: fecha-encabezado-remitente-cuerpo en un JWT (para que después podamos descifrar)
@@ -79,6 +80,7 @@ try:
                                 .iloc[0]["responsable"]
                             )
                             # preparamos el objeto a insertar en la bd
+                            operation_upper = asunto.split("-")[2].upper()
                             mongo_object = {
                                 "fecha": msg.date,
                                 "asunto": asunto.upper(),
@@ -88,13 +90,13 @@ try:
                                 "atendido": 0,
                                 "delegacion": asunto.split("-")[0],
                                 "subdelegacion": asunto.split("-")[1],
-                                "operacion": asunto.split("-")[2].upper(),
+                                "operacion": operation_upper,
                                 "sujeto": asunto.split("-")[3],
                             }
                             # movemos el archivo a la carpeta /SOLICITUDES VALIDAS/ y enviamos los correos de respuesta y atención
                             mailbox.move(f"{msg.uid}", "INBOX/SOLICITUDES VALIDAS")
                             print("SOL. VALIDA: ", asunto)
-                            correo_respuesta(True, "", msg.from_, asunto)
+                            correo_respuesta(True, "", msg.from_, asunto, operation_upper)
                             # inseramos en la bd
                             # col_solicitudes.insert_one(mongo_object)
                             col_solicitudes2.insert_one(mongo_object)
@@ -114,7 +116,7 @@ try:
                         # print(e)
                         mailbox.move(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
                         print("SOL. NO VALIDA: ", asunto)
-                        correo_respuesta(False, e, msg.from_, asunto)
+                        correo_respuesta(False, e, msg.from_, asunto, tipo_operacion.upper())
                         mongo_object = {
                             "fecha": msg.date,
                             "asunto": asunto.upper(),
@@ -145,7 +147,7 @@ try:
                     except Exception as e:
                         print(f"Remitente FUERA DE LISTA {msg.from_}")
                         asunto = msg.subject.strip()
-                        correo_respuesta(False, e, msg.from_, asunto)
+                        correo_respuesta(False, e, msg.from_, asunto, "")
                         mailbox.move(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
                         print("SOL. NO VALIDA: ", asunto)
 
