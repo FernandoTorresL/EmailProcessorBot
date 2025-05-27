@@ -55,7 +55,7 @@ try:
                             tipo_operacion = asunto.split("-")[2]
                         except Exception:
                             excepcion_asunto = "Asunto inválido"
-                            excepcion_anexos = excepcion_cuerpo = ""
+                            excepcion_anexos = excepcion_cuerpo = excepcion_tamanio = ""
                             # print(f"SOL. NO VALIDA de: {msg.from_} | Asunto inválido: {asunto} ")
                             raise Exception(f"Asunto {asunto} no válido")
                         #
@@ -65,12 +65,17 @@ try:
                         cuerpo_valido, excepcion_cuerpo = validar_cuerpo_correo(
                             msg.text, tipo_operacion
                         )
+
+                        tamanio_valido, excepcion_tamanio = validar_tamanio(msg.size, asunto)
+
                         # dado que en esta funcion validamos la bitacora, la regresamos de una vez :))
                         anexos_validos, excepcion_anexos, bitacora = validar_anexos(
-                            msg.attachments, tipo_operacion, asunto, msg.text
+                            msg.attachments, tipo_operacion, asunto, msg.text, msg.size
                         )
+
+
                         # si falló al menos una validación, rechazamos
-                        if asunto_valido and cuerpo_valido and anexos_validos:
+                        if asunto_valido and cuerpo_valido and anexos_validos and tamanio_valido:
                             usuario_atencion = (
                                 df_usuarios.loc[
                                     df_usuarios.cve_solicitud.str.lower()
@@ -95,7 +100,6 @@ try:
                             }
                             # movemos el archivo a la carpeta /SOLICITUDES VALIDAS/ y enviamos los correos de respuesta y atención
                             mailbox.move(f"{msg.uid}", "INBOX/SOLICITUDES VALIDAS")
-                            print("SOL. VALIDA: ", asunto)
                             correo_respuesta(True, "", msg.from_, asunto, operation_upper)
                             # inseramos en la bd
                             # col_solicitudes.insert_one(mongo_object)
@@ -107,11 +111,12 @@ try:
                             col_bitacora2.insert_many(bitacora.to_dict("records"))
 
                             correo_atender(msg.obj, asunto, tipo_operacion, msg.from_)
+                            print("SOL. VALIDA: ", asunto)
                         else:
                             # mailbox.(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
                             # print("SOL. NO VALIDA: ", asunto)
                             # print(', '.join([str(x) for x in [excepcion_asunto, excepcion_cuerpo, excepcion_anexos] if x is not None]))
-                            raise Exception(" ".join([f"<li>{str(x)}</li>" for x in [excepcion_asunto, excepcion_cuerpo, excepcion_anexos] if x is not None]))
+                            raise Exception(" ".join([f"<li>{str(x)}</li>" for x in [excepcion_asunto, excepcion_cuerpo, excepcion_anexos, excepcion_tamanio] if x is not None]))
                     except Exception as e:
                         # print(e)
                         mailbox.move(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
@@ -125,6 +130,7 @@ try:
                             "excepcion_asunto": str(excepcion_asunto),
                             "excepcion_anexo": str(excepcion_anexos),
                             "excepcion_cuerpo": str(excepcion_cuerpo),
+                            "excepcion_tamanio": str(excepcion_tamanio),
                             "remitente_permitido": msg.from_ in subdelegados,
                         }
                         # insertamos el error en otra colección de la BD

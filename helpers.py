@@ -31,11 +31,11 @@ from unidecode import unidecode
 from credenciales import (BAD_MAIL_STRING, BITACORA_SIZE, DOMINIO_MAILBOX,
                           EMAIL_ADMINISTRADOR, EMAIL_ASUNTO_ASIGNADO_OK,
                           EMAIL_ASUNTO_ERROR, EMAIL_DUDAS, EMAIL_DUDAS_MOD40,
-                          EMAIL_MAILBOX, EMAIL_MICROSOFT, FOLDER_MAILBOX,
-                          IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
-                          PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
-                          PORT_SMTP, PWD_MONGO, RPS_NO_PERMITIDOS,
-                          URL_CIRCULAR, USER_NAME_MONGO)
+                          EMAIL_MAILBOX, EMAIL_MICROSOFT, ERROR_BIG_MSG,
+                          FOLDER_MAILBOX, IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP,
+                          MSG_LIMIT, PASSWORD_MAILBOX, PATH_ARCHIVO,
+                          PORT_MAILBOX, PORT_SMTP, PWD_MONGO,
+                          RPS_NO_PERMITIDOS, URL_CIRCULAR, USER_NAME_MONGO)
 # archivo que contiene la lista de las subdelegaciones válidas
 from cves_subdelegacion import cves_subdel
 
@@ -143,7 +143,6 @@ def regex_operaciones(tipo_operacion: str, value: str) -> bool:
             raise Exception(excepcion)
     except Exception as e:
         return False, e
-
 
 # función que valida el asunto
 def validar_asunto(asunto: str) -> bool:
@@ -377,10 +376,26 @@ def validar_bitacora_smb(cuerpo: str) -> pd.DataFrame:
 
 nota_carpeta = "No debe de combinar más de un anexo en un solo archivo. Si en conjunto los archivos pesan más de 10MB incluír una carpeta con el mismo nombre que el asunto del correo."
 
+# Validate msg size
+def validar_tamanio(msg_size: int, asunto: str) -> bool:
+    try:
+
+        # tamanio = msg_size / (1024^4)
+        # if msg_size > 13688860:
+        if msg_size > 13688860:
+            excepcion = ERROR_BIG_MSG
+            print(f"Excepcion para {asunto}: {excepcion}")
+            raise Exception(excepcion)
+        else:
+            return True, None
+
+    except Exception as e:
+        return False, e
 
 def validar_anexos(
-    attachments: list, tipo_operacion: str, asunto: str, cuerpo: str
+    attachments: list, tipo_operacion: str, asunto: str, cuerpo: str, tamanio: str
 ) -> bool:
+
     # quitamos el archivo image001 de los anexos (este corresponde a la firma)
     attachments = [
         x for x in attachments if ("inline" not in x.content_disposition)
