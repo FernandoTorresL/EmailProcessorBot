@@ -61,7 +61,7 @@ try:
                         #
                         # cuerpo_correo = msg.text.split("Enviado el:")[0]
                         # evaluamos el asunto, cuerpo y anexos, en orden, si hay excepciones en alguno, las guardamos
-                        asunto_valido, excepcion_asunto = validar_asunto(asunto=asunto)
+                        asunto_valido, excepcion_asunto = validar_asunto(asunto=asunto, remitente=msg.from_)
                         cuerpo_valido, excepcion_cuerpo = validar_cuerpo_correo(
                             msg.text, tipo_operacion
                         )
@@ -115,7 +115,6 @@ try:
                     except Exception as e:
                         # print(e)
                         mailbox.move(f"{msg.uid}", "INBOX/NO-SOLICITUDES")
-                        print("SOL. NO VALIDA: ", asunto)
                         correo_respuesta(False, e, msg.from_, asunto, tipo_operacion.upper())
                         mongo_object = {
                             "fecha": msg.date,
@@ -129,6 +128,7 @@ try:
                         }
                         # insertamos el error en otra colección de la BD
                         col_errores.insert_one(mongo_object)
+                        print("SOL. NO VALIDA: ", asunto)
                 elif (
                     msg.from_
                     == EMAIL_MICROSOFT
