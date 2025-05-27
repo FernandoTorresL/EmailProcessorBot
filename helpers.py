@@ -83,7 +83,12 @@ path = "."
 # leemos el archivo con los remitentes
 df_subdelegados = pd.read_csv(f"{path}/Directorio Nacional Subdelegados.csv")
 subdelegados = df_subdelegados.Email.str.strip().tolist()
-del df_subdelegados
+
+# Generamos columna nueva en dataframe que contenga la combinación de Del y Subdel
+df_subdelegados['del-subdel'] = df_subdelegados['CVE_DELEGACION'].apply(lambda x: f"{x:02}") + df_subdelegados['CVE_SUBDELEGACION'].apply(lambda x: f"{x:02}")
+
+
+# del df_subdelegados
 
 smbclient.ClientConfig(username=EMAIL_MAILBOX, password=PASSWORD_MAILBOX)
 
@@ -146,7 +151,7 @@ def regex_operaciones(tipo_operacion: str, value: str) -> bool:
 
 
 # función que valida el asunto
-def validar_asunto(asunto: str) -> bool:
+def validar_asunto(asunto: str, remitente: str) -> bool:
     try:
         asunto_split = asunto.split("-")
         # validamos componente por componente, primero vemos que al separar por guiones el asunto, éste tenga 4 elementos, si no, tiramos excepción
@@ -169,7 +174,16 @@ def validar_asunto(asunto: str) -> bool:
                     )
                 # finalmente, revisamos que el cuarto elemento sea del tipo correcto (según el tipo de operación), si todo bien, regresamos True
                 else:
-                    return regex_operaciones(asunto_split[2], asunto_split[3])
+                    # Verificamos que el subdelegado corresponda al asunto:
+                    subdelegado_valido_en_del_subdel = ((df_subdelegados['Email'] == remitente) & (df_subdelegados['del-subdel'] == cve_compue)).any()
+
+                    if subdelegado_valido_en_del_subdel:
+                        return regex_operaciones(asunto_split[2], asunto_split[3])
+                    else:
+                        raise Exception(
+                            f"{asunto_split[0]}-{asunto_split[1]} no corresponde a su Delegación/Subdelegación"
+                            )
+
     # si hubo alguna excepción, enviamos False y la excepción (para reportarla al solicitante)
     except Exception as e:
         return False, e
