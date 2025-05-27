@@ -26,6 +26,7 @@ for msg in mailbox.fetch():
             asunto = msg.subject.strip()
         if "atendid" not in msg.subject.lower():
             if msg.from_ in subdelegados:
+                tipo_operacion = ""
                 try:
                     # la estrategia va a ser ésta, como IMAP no tiene ID's especificos por correo, vamos a generar una llave
                     # ésta está compuesta por: fecha-encabezado-remitente-cuerpo en un JWT (para que después podamos descifrar)
@@ -54,6 +55,7 @@ for msg in mailbox.fetch():
                             .iloc[0]["responsable"]
                         )
                         # preparamos el objeto a insertar en la bd
+                        operation_upper = asunto.split("-")[2].upper()
                         mongo_object = {
                             "fecha": msg.date,
                             "asunto": asunto.upper(),
@@ -66,7 +68,7 @@ for msg in mailbox.fetch():
                             "operacion": asunto.split("-")[2].upper(),
                             "sujeto": asunto.split("-")[3],
                         }
-                        correo_respuesta(True, "", args.destinatario, asunto)
+                        correo_respuesta(True, "", args.destinatario, asunto, operation_upper)
                         # le ponemos fecha y asunto a la bitácora y la insertamos
                         bitacora["asunto"] = asunto
                         bitacora["fecha"] = msg.date
@@ -85,7 +87,7 @@ for msg in mailbox.fetch():
                             )
                         )
                 except Exception as e:
-                    correo_respuesta(False, e, args.destinatario, asunto)
+                    correo_respuesta(False, e, args.destinatario, asunto, tipo_operacion.upper())
                     mongo_object = {
                         "fecha": msg.date,
                         "asunto": asunto,
@@ -111,7 +113,7 @@ for msg in mailbox.fetch():
                     )
                 except Exception as e:
                     asunto = msg.subject.strip()
-                    correo_respuesta(False, e, args.destinatario, asunto)
+                    correo_respuesta(False, e, args.destinatario, asunto, tipo_operacion.upper())
         else:
             try:
                 asunto = (
