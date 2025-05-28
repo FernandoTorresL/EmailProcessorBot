@@ -390,13 +390,21 @@ def validar_bitacora_smb(cuerpo: str) -> pd.DataFrame:
 
 nota_carpeta = "No debe de combinar más de un anexo en un solo archivo. Si en conjunto los archivos pesan más de 10MB incluír una carpeta con el mismo nombre que el asunto del correo."
 
-# Validate msg size
-def validar_tamanio(msg_size: int, asunto: str) -> bool:
-    try:
 
-        # tamanio = msg_size / (1024^4)
-        # if msg_size > 13688860:
-        if msg_size > 13688860:
+# Validate msg size
+# msg_size: int, asunto: str) -> bool:
+def validar_tamanio(attachments: list, asunto: str) -> bool:
+
+    try:
+        tamanio_correo = 0
+        for x in attachments:
+            tamanio_correo += x.size
+            # print(f"\tTamaño de adjunto {asunto}: {(x.size/1024):02} KB")
+
+        tamanio_correo = tamanio_correo/1024/1024
+        print(f"Tamaño de correo {asunto}: {tamanio_correo:02} MB")
+
+        if tamanio_correo > 9.8:
             excepcion = ERROR_BIG_MSG
             print(f"Excepcion para {asunto}: {excepcion}")
             raise Exception(excepcion)
@@ -405,6 +413,7 @@ def validar_tamanio(msg_size: int, asunto: str) -> bool:
 
     except Exception as e:
         return False, e
+
 
 def validar_anexos(
     attachments: list, tipo_operacion: str, asunto: str, cuerpo: str, tamanio: str
@@ -417,6 +426,7 @@ def validar_anexos(
     attachments = [
         x for x in attachments if ("image00" not in x.filename.split(".")[0])
     ]
+
     try:
         if (
             len(
