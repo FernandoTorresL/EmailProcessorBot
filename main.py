@@ -66,7 +66,7 @@ try:
                             msg.text, tipo_operacion
                         )
 
-                        tamanio_valido, excepcion_tamanio = validar_tamanio(msg.size, asunto)
+                        tamanio_valido, excepcion_tamanio = validar_tamanio(msg.attachments, asunto)
 
                         # dado que en esta funcion validamos la bitacora, la regresamos de una vez :))
                         anexos_validos, excepcion_anexos, bitacora = validar_anexos(
