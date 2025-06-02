@@ -166,7 +166,19 @@ try:
                         .strip()
                         .replace(" ", "")
                     )
+
+                    ayudante_email = ""
                     operacion = asunto.split("-")[2].upper()
+
+                    if operacion == "MOTIVO1":
+                        try:
+                            iniciales = msg.subject.replace("\r\n", "").split("(")[1].split(")")[0]
+
+                            ayudante_email = AYUDANTES[iniciales]
+
+                        except Exception:
+                            raise ValueError(f"Asunto incorrecto o iniciales no registradas en {asunto}. No se pudo marcar como atendido")
+
                     solicitudes_usuario = pd.DataFrame(
                         col_solicitudes2.find(
                             {
@@ -200,6 +212,8 @@ try:
                     elif "parcial" in msg.subject.lower():
                         status = "Parcial"
                     # col_solicitudes.update_one({'_id':id_update},{'$set':{'atendido':1, 'fecha_atencion':datetime.today(), 'estatus':status}})
+
+
                     col_solicitudes2.update_one(
                         {"_id": id_update},
                         {
@@ -208,12 +222,14 @@ try:
                                 "atendido_por": msg.from_,
                                 "fecha_atencion": msg.date,
                                 # "fecha_atencion": datetime.today(),
+                                "ayudante": ayudante_email,
                                 "estatus": status,
                             }
                         },
                     )
                     mailbox.move(f"{msg.uid}", "INBOX/ATENDIDOS")
                     correo_respuesta_atencion(True, msg.from_, asunto)
+                    print("ok")
                 except Exception as e:
                     print(e)
                     mailbox.move(f"{msg.uid}", "INBOX/ERROR-AL-MARCAR")

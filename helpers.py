@@ -28,14 +28,15 @@ from pymongo import MongoClient
 from tqdm import tqdm
 from unidecode import unidecode
 
-from credenciales import (BAD_MAIL_STRING, BITACORA_SIZE, DOMINIO_MAILBOX,
-                          EMAIL_ADMINISTRADOR, EMAIL_ASUNTO_ASIGNADO_OK,
-                          EMAIL_ASUNTO_ERROR, EMAIL_DUDAS, EMAIL_DUDAS_MOD40,
-                          EMAIL_MAILBOX, EMAIL_MICROSOFT, ERROR_BIG_MSG,
-                          FOLDER_MAILBOX, IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP,
-                          MSG_LIMIT, PASSWORD_MAILBOX, PATH_ARCHIVO,
-                          PORT_MAILBOX, PORT_SMTP, PWD_MONGO,
-                          RPS_NO_PERMITIDOS, URL_CIRCULAR, USER_NAME_MONGO)
+from credenciales import (AYUDANTES, BAD_MAIL_STRING, BITACORA_SIZE,
+                          DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR,
+                          EMAIL_ASUNTO_ASIGNADO_OK, EMAIL_ASUNTO_ERROR,
+                          EMAIL_DUDAS, EMAIL_DUDAS_MOD40, EMAIL_MAILBOX,
+                          EMAIL_MICROSOFT, ERROR_BIG_MSG, FOLDER_MAILBOX,
+                          IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
+                          PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
+                          PORT_SMTP, PWD_MONGO, RPS_NO_PERMITIDOS,
+                          URL_CIRCULAR, USER_NAME_MONGO)
 # archivo que contiene la lista de las subdelegaciones válidas
 from cves_subdelegacion import cves_subdel
 
