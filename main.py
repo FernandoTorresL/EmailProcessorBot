@@ -170,14 +170,12 @@ try:
                     ayudante_email = ""
                     operacion = asunto.split("-")[2].upper()
 
-                    if operacion == "MOTIVO1":
-                        try:
-                            iniciales = msg.subject.replace("\r\n", "").split("(")[1].split(")")[0]
+                    iniciales = msg.subject.replace("\r\n", "")
 
-                            ayudante_email = AYUDANTES[iniciales]
+                    if operacion == "MOTIVO1" and "(" in iniciales and ")" in iniciales:
+                        iniciales = iniciales.split("(")[1].split(")")[0]
 
-                        except Exception:
-                            raise ValueError(f"Asunto incorrecto o iniciales no registradas en {asunto}. No se pudo marcar como atendido")
+                        ayudante_email = AYUDANTES[iniciales]
 
                     solicitudes_usuario = pd.DataFrame(
                         col_solicitudes2.find(
@@ -213,20 +211,32 @@ try:
                         status = "Parcial"
                     # col_solicitudes.update_one({'_id':id_update},{'$set':{'atendido':1, 'fecha_atencion':datetime.today(), 'estatus':status}})
 
+                    if operacion == "MOTIVO1":
+                        col_solicitudes2.update_one(
+                            {"_id": id_update},
+                            {
+                                "$set": {
+                                    "atendido": 1,
+                                    "atendido_por": msg.from_,
+                                    "fecha_atencion": msg.date,
+                                    "ayudante": ayudante_email,
+                                    "estatus": status,
+                                }
+                            },
+                        )
+                    else:
+                        col_solicitudes2.update_one(
+                            {"_id": id_update},
+                            {
+                                "$set": {
+                                    "atendido": 1,
+                                    "atendido_por": msg.from_,
+                                    "fecha_atencion": msg.date,
+                                    "estatus": status,
+                                }
+                            },
+                        )
 
-                    col_solicitudes2.update_one(
-                        {"_id": id_update},
-                        {
-                            "$set": {
-                                "atendido": 1,
-                                "atendido_por": msg.from_,
-                                "fecha_atencion": msg.date,
-                                # "fecha_atencion": datetime.today(),
-                                "ayudante": ayudante_email,
-                                "estatus": status,
-                            }
-                        },
-                    )
                     mailbox.move(f"{msg.uid}", "INBOX/ATENDIDOS")
                     correo_respuesta_atencion(True, msg.from_, asunto)
                     print("ok")
@@ -236,6 +246,7 @@ try:
                     print("ERROR AL MARCAR: ", asunto)
                     # correo_respuesta_atencion(False, EMAIL_ADMINISTRADOR, asunto)
                     correo_respuesta_atencion(False, msg.from_, asunto)
+                    print("")
         else:
             print("no-imss")
             mailbox.move(f"{msg.uid}", "Junk")
