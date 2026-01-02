@@ -403,7 +403,7 @@ def validar_tamanio(attachments: list, asunto: str) -> bool:
             # print(f"\tTamaño de adjunto {asunto}: {(x.size/1024):02} KB")
 
         tamanio_correo = tamanio_correo/1024/1024
-        print(f"Tamaño de correo {asunto}: {tamanio_correo:02} MB")
+        #print(f"Tamaño de correo {asunto}: {tamanio_correo:02} MB")
 
         if tamanio_correo > 9.8:
             excepcion = ERROR_BIG_MSG
@@ -472,7 +472,7 @@ def validar_anexos(
                 )
             )
             #if (bitacora.shape[0] > 10) or (bitacora.shape[1] > 9):
-            print(f"Tamaño bitacora para {asunto}:{bitacora.shape}")
+            #print(f"Tamaño bitacora para {asunto}:{bitacora.shape}")
             if bitacora.shape[0] > BITACORA_SIZE:
                excepcion = "La bitácora parece exceder de tamaño. No incluir toda la historia de su bitácora, enviar sólo el renglón correspondiente a la petición de su correo. O puede ser que inadvertidamente haya agregado/modificado renglones/columnas vacías. Revise la cantidad de filas o columnas."
                print(f"Excepcion para {asunto}: {excepcion}")

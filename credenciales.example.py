@@ -10,7 +10,10 @@ BITACORA_SIZE = 200
 BAD_MAIL_STRING = 'ASUNTO_NO_PERMITIDO'
 
 ERROR_BIG_MSG = ''
-
+AYUDANTES = {
+    "L": "l@imss.gob",
+    "N": "n@imss.gob",
+}
 PATH_ARCHIVO = './archivo'
 
 EMAIL_MICROSOFT = 'MicrosoftExchange1@imss.gob'

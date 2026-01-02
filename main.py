@@ -21,22 +21,35 @@ try:
                     .replace(">", "")
                     .replace(" ", "")
                     .replace("|", "")
+                    .replace("*", "")
                 )
             except Exception:
                 asunto = msg.subject.strip()
             # guardamos el archivo
 
-            nombre_filename = msg.subject.strip()
+            nombre_filename = msg.subject.strip().upper()
+            nombre_filename = nombre_filename.replace(DOMINIO_MAILBOX.upper(), '')
+            nombre_filename = nombre_filename.replace('ATENDIDO ', 'AT-')
+            nombre_filename = nombre_filename.replace('A ATENDER: ', '')
+            nombre_filename = nombre_filename.replace('CON RECHAZO ', 'RECHAZO ')
+            nombre_filename = nombre_filename.replace('RV: ', '')
+            nombre_filename = nombre_filename.replace('RE: ', '')
+            nombre_filename = nombre_filename.replace('_', '-')
             nombre_filename = nombre_filename.replace('\r\n', '')
             nombre_filename = nombre_filename.replace('\t', '')
             nombre_filename = nombre_filename.replace('--', '')
             nombre_filename = nombre_filename.replace('"', '')
             nombre_filename = nombre_filename.replace('|', '')
+            nombre_filename = nombre_filename.replace('*', '')
             filename = (
                 f"{msg.date}-{nombre_filename}.eml".strip()
+                .replace("ENVIADO POR: ", "-")
                 .replace(" ", "-")
                 .replace(":", "")
                 .replace("/", "-")
+                .replace("---", "-")
+                .replace("--", "-")
+                .replace("+0000", "")
             )
 
             with open(
@@ -178,20 +191,16 @@ try:
                         ayudante_email = AYUDANTES[iniciales]
 
                     solicitudes_usuario = pd.DataFrame(
-                        col_solicitudes2.find(
-                            {
-                                "operacion": { "$regex": operacion, "$options": "i" },
-                                "$or": [
-                                    {"estatus": {"$in": ["Parcial", "Rechazado",
-                                                         "Reasignado"]}},
-                                    {"atendido": 0},
-                                ],
+                        col_solicitudes2.find({
+                            "operacion": {
+                                "$regex": operacion, "$options": "i"},
+                            "atendido": 0,
                             }
                         )
                     )
-                    solicitudes_usuario["asunto"] = solicitudes_usuario[
-                        "asunto"
-                    ].str.lower()
+
+                    solicitudes_usuario["asunto"] = solicitudes_usuario["asunto"].str.lower()
+
                     try:
                         id_update = (
                             solicitudes_usuario.loc[
@@ -239,7 +248,7 @@ try:
 
                     mailbox.move(f"{msg.uid}", "INBOX/ATENDIDOS")
                     correo_respuesta_atencion(True, msg.from_, asunto)
-                    print("ok")
+
                 except Exception as e:
                     print(e)
                     mailbox.move(f"{msg.uid}", "INBOX/ERROR-AL-MARCAR")
