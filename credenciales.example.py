@@ -8,7 +8,12 @@ DOMINIO_MAILBOX = '@imss.gob'
 MSG_LIMIT = 50
 BITACORA_SIZE = 200
 BAD_MAIL_STRING = 'ASUNTO_NO_PERMITIDO'
-
+SOLO_REENVIO_POR_BUZON_LLENO = False # Default = False
+ERROR_BIG_MSG = ''
+AYUDANTES = {
+    "L": "l@imss.gob",
+    "N": "n@imss.gob",
+}
 PATH_ARCHIVO = './archivo'
 
 EMAIL_MICROSOFT = 'MicrosoftExchange1@imss.gob'
@@ -23,6 +28,7 @@ RPS_NO_PERMITIDOS = {"Y500000000", "0"}
 IP_MONGO_CLIENT = '5.6.7.8:2'
 USER_NAME_MONGO = 'demo_user_mongo'
 PWD_MONGO = 'demo_pwd_mongo'
+AUTH_SOURCE_MONGO = 'demo_authsource_mongo'
 
 IP_SMTP = '0.1.2.3'
 PORT_SMTP = 2

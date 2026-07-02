@@ -23,8 +23,8 @@ El código original fue desarrollado por personal de la _USE_ y posteriormente e
 
 El proyecto fue construido usando:
 
-- Python v3.11 (original)
-- Python v3.12.3 (W10 - Pruebas)
+- Python v3.11.4
+- Python v3.11.4 (W10 - Pruebas)
 - Python v3.12.3 (OS - Pruebas)
 - [DavMail](https://davmail.sourceforge.net) (Requiere Java JDK en el equipo donde se instale. Ver [setup](https:davmail.sourceforge.net/windowssetup.html))
 
@@ -45,8 +45,9 @@ Debes crear y actualizar los siguientes archivos:
 - A csv file "Destinatarios en CA.csv"
 - A csv file "Directorio Nacional Subdelegados.csv"
 - A python file "credenciales.py"
+- A csv file "nss_ooad_ope.csv"
 
-> Todos basados en sus versiones .example.py incluidos en este repositorio.
+> Todos basados en sus versiones .example incluidos en este repositorio.
 
 - Si no se detecta Java, deberá crear un archivo davmail64.ini y usar la línea siguiente con la ruta de exe de DavMail
 
@@ -135,6 +136,7 @@ Antes de ejecutar el programa, debes crear y actualizar el contenido de los arch
 * credenciales.py
 * Destinatarios en CA.csv
 * Directorio Nacional Subdelegados.csv
+* nss_ooad_ope.csv
 
 Y podrás ejecutar el programa:
 > Then, you can execute the program:

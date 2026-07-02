@@ -1,3 +1,6 @@
+import random
+import zipfile
+
 import email
 # bueno, ya intenté varias y parece que la más sencilla es IMAPTOOLS
 import imaplib
@@ -28,14 +31,17 @@ from pymongo import MongoClient
 from tqdm import tqdm
 from unidecode import unidecode
 
-from credenciales import (BAD_MAIL_STRING, BITACORA_SIZE, DOMINIO_MAILBOX,
-                          EMAIL_ADMINISTRADOR, EMAIL_ASUNTO_ASIGNADO_OK,
-                          EMAIL_ASUNTO_ERROR, EMAIL_DUDAS, EMAIL_DUDAS_MOD40,
-                          EMAIL_MAILBOX, EMAIL_MICROSOFT, FOLDER_MAILBOX,
+from credenciales import (AYUDANTES, BAD_MAIL_STRING, BITACORA_SIZE,
+                          DOMINIO_MAILBOX, EMAIL_ADMINISTRADOR,
+                          EMAIL_ASUNTO_ASIGNADO_OK, EMAIL_ASUNTO_ERROR,
+                          EMAIL_DUDAS, EMAIL_DUDAS_MOD40, EMAIL_MAILBOX,
+                          EMAIL_MICROSOFT, ERROR_BIG_MSG, FOLDER_MAILBOX,
+                          SOLO_REENVIO_POR_BUZON_LLENO,
                           IP_MAILBOX, IP_MONGO_CLIENT, IP_SMTP, MSG_LIMIT,
                           PASSWORD_MAILBOX, PATH_ARCHIVO, PORT_MAILBOX,
-                          PORT_SMTP, PWD_MONGO, RPS_NO_PERMITIDOS,
-                          URL_CIRCULAR, USER_NAME_MONGO)
+                          PORT_SMTP, 
+                          USER_NAME_MONGO, PWD_MONGO, AUTH_SOURCE_MONGO,
+                          RPS_NO_PERMITIDOS, URL_CIRCULAR, )
 # archivo que contiene la lista de las subdelegaciones válidas
 from cves_subdelegacion import cves_subdel
 
@@ -43,7 +49,7 @@ conn_nvo = MongoClient(
     IP_MONGO_CLIENT,
     username=USER_NAME_MONGO,
     password=PWD_MONGO,
-    authsource="admin",
+    authsource=AUTH_SOURCE_MONGO,
     authMechanism="SCRAM-SHA-256",
 )
 db2 = conn_nvo["afiliacion"]
@@ -76,6 +82,9 @@ cves_solicitud = [
     "PTH",
     "PTI",
     "CDA00",
+    "UISS88",
+    "UFC1127F",
+    "UFC1127C"
 ]
 
 # path de ejecución, ACTUALIZAR
@@ -83,7 +92,12 @@ path = "."
 # leemos el archivo con los remitentes
 df_subdelegados = pd.read_csv(f"{path}/Directorio Nacional Subdelegados.csv")
 subdelegados = df_subdelegados.Email.str.strip().tolist()
-del df_subdelegados
+
+# Generamos columna nueva en dataframe que contenga la combinación de Del y Subdel
+df_subdelegados['del-subdel'] = df_subdelegados['CVE_DELEGACION'].apply(lambda x: f"{x:02}") + df_subdelegados['CVE_SUBDELEGACION'].apply(lambda x: f"{x:02}")
+
+
+# del df_subdelegados
 
 smbclient.ClientConfig(username=EMAIL_MAILBOX, password=PASSWORD_MAILBOX)
 
@@ -144,9 +158,8 @@ def regex_operaciones(tipo_operacion: str, value: str) -> bool:
     except Exception as e:
         return False, e
 
-
 # función que valida el asunto
-def validar_asunto(asunto: str) -> bool:
+def validar_asunto(asunto: str, remitente: str) -> bool:
     try:
         asunto_split = asunto.split("-")
         # validamos componente por componente, primero vemos que al separar por guiones el asunto, éste tenga 4 elementos, si no, tiramos excepción
@@ -159,7 +172,7 @@ def validar_asunto(asunto: str) -> bool:
             )
             if cve_compue not in cves_subdel:
                 raise Exception(
-                    "La combinación de cve_delegacion y cve_subdelegacion proporcionadas no forman una subdelegación válida."
+                    "Asunto inválido: NO contiene un asunto limpio conforme a la Circular, contiene 'RE:' o 'RV:' o la combinación de cve_delegacion y cve_subdelegacion proporcionadas no forman un valor válido"
                 )
             else:
                 # validamos que el tercer elemento sea un tipo de operación válida
@@ -169,7 +182,35 @@ def validar_asunto(asunto: str) -> bool:
                     )
                 # finalmente, revisamos que el cuarto elemento sea del tipo correcto (según el tipo de operación), si todo bien, regresamos True
                 else:
-                    return regex_operaciones(asunto_split[2], asunto_split[3])
+                    # Verificamos que el NSS se encuentre en el listado autorizado
+                    ope_asunto = asunto_split[2].upper()
+                    if ope_asunto in ["UISS88", "UFC1127F", "UFC1127C"]:
+                        # leemos el archivo con los NSS
+                        df_nss_ooad_ope = pd.read_csv(
+                            f"{path}/nss_ooad_ope.csv",
+                            quotechar="'"
+                        ).astype(str)
+
+                        nss_asunto = asunto_split[3]
+                        del_asunto = asunto_split[0]
+
+                        nss_valido = ((df_nss_ooad_ope['nss'] == nss_asunto) & (df_nss_ooad_ope['ccve_ooad'] == del_asunto) & (df_nss_ooad_ope['operacion'] == ope_asunto )).any()
+
+                        if not nss_valido:
+                            raise Exception(
+                                f"El NSS {nss_asunto} no corresponde a su OOAD o no se encuentra en el listado de NSS solicitado. Favor de revisar con su normativo"
+                                )
+
+                    # Verificamos que el subdelegado corresponda al asunto:
+                    subdelegado_valido_en_del_subdel = ((df_subdelegados['Email'] == remitente) & (df_subdelegados['del-subdel'] == cve_compue)).any()
+
+                    if subdelegado_valido_en_del_subdel:
+                        return regex_operaciones(asunto_split[2], asunto_split[3])
+                    else:
+                        raise Exception(
+                            f"{asunto_split[0]}-{asunto_split[1]} no corresponde a su Delegación/Subdelegación"
+                            )
+
     # si hubo alguna excepción, enviamos False y la excepción (para reportarla al solicitante)
     except Exception as e:
         return False, e
@@ -186,10 +227,13 @@ def validar_ops(cuerpo: str, tipo_operacion: str) -> [bool, str]:
         tipo_operacion = tipo_operacion.lower()
         # ya aquí según el cuerpo de operación pedimos que existan los elementos necesarios
         # si existen, regresamos True y None, si no, False y la excepción
-        if tipo_operacion in ["cda07", "motivo2", "motivo7"]:
+        if tipo_operacion in ["cda07", "motivo2", "motivo7", "uiss88", "ufc1127f", "ufc1127c"]:
             if (
                 ("ciz" in cuerpo or "cicz" in cuerpo)
-                and "nss" in cuerpo.replace(".", "")
+                and ("nss" in cuerpo.replace(".", "")
+                or "numero de seguridad social" in cuerpo.replace(".", "") 
+                or "número de seguridad social" in cuerpo.replace(".", "") 
+                )
                 and (
                     ("registro" in cuerpo and "patronal" in cuerpo)
                     or "reg patronal" in cuerpo
@@ -210,8 +254,7 @@ def validar_ops(cuerpo: str, tipo_operacion: str) -> [bool, str]:
                     or ("tc12" in cuerpo)
                     or ("tc 12" in cuerpo)
                     or ("tc-12" in cuerpo)
-                    or ("tc - 12" in cuerpo)
-                ):
+                    or ("tc - 12" in cuerpo) ) and (tipo_operacion not in ["uiss88", "ufc1127f", "ufc1127c"]):
                     raise Exception(
                         "No puede referirse a TC11, TC12 o Histórico central en las solicitudes CDA07. Revise su solicitud y/o CIZ en tabla"
                     )
@@ -316,7 +359,7 @@ def validar_cuerpo_correo(cuerpo: str, tipo_operacion: str) -> bool:
         ):
             raise Exception("No se incluyó la nota responsiva en el cuerpo")
         else:
-            if tipo_operacion in ["CDA07", "MOTIVO1", "MOTIVO2", "MOTIVO7", "MOD40"]:
+            if tipo_operacion in ["CDA07", "MOTIVO1", "MOTIVO2", "MOTIVO7", "MOD40", "UISS88", "UFC1127F", "UFC1127C"]:
                 result, excepcion = validar_ops(cuerpo, tipo_operacion)
                 return result, excepcion
             else:
@@ -378,9 +421,40 @@ def validar_bitacora_smb(cuerpo: str) -> pd.DataFrame:
 nota_carpeta = "No debe de combinar más de un anexo en un solo archivo. Si en conjunto los archivos pesan más de 10MB incluír una carpeta con el mismo nombre que el asunto del correo."
 
 
+# Validate msg size
+# msg_size: int, asunto: str) -> bool:
+def validar_tamanio(attachments: list, asunto: str) -> bool:
+
+    try:
+        tamanio_correo = 0
+        for x in attachments:
+            tamanio_correo += x.size
+            # print(f"\tTamaño de adjunto {asunto}: {(x.size/1024):02} KB")
+
+        tamanio_correo = tamanio_correo/1024/1024
+        #print(f"Tamaño de correo {asunto}: {tamanio_correo:02} MB")
+
+        if tamanio_correo > 9.8:
+            excepcion = ERROR_BIG_MSG
+            print(f"Excepcion para {asunto}: {excepcion}")
+
+            correo_debug(EMAIL_ADMINISTRADOR, f"Log: Correo excede tamaño", f"Se ha enviado solicitud que excede el límite. Asunto {asunto}")
+
+            raise Exception(excepcion)
+        else:
+            return True, None
+
+    except Exception as e:
+        return False, e
+
+
 def validar_anexos(
-    attachments: list, tipo_operacion: str, asunto: str, cuerpo: str
+    attachments: list, tipo_operacion: str, asunto: str, cuerpo: str, tamanio: str
 ) -> bool:
+    
+    # if tipo_operacion.lower() in ["uiss88", "ufc1127f", "ufc1127c"]:
+    #     return True, None, None
+
     # quitamos el archivo image001 de los anexos (este corresponde a la firma)
     attachments = [
         x for x in attachments if ("inline" not in x.content_disposition)
@@ -388,6 +462,7 @@ def validar_anexos(
     attachments = [
         x for x in attachments if ("image00" not in x.filename.split(".")[0])
     ]
+
     try:
         if (
             len(
@@ -403,6 +478,8 @@ def validar_anexos(
                 ]
             )
             == 1
+        ) and (
+            tipo_operacion.lower() not in ["uiss88", "ufc1127f", "ufc1127c"]
         ):
             nomb_archivo = [
                 x.filename
@@ -417,6 +494,7 @@ def validar_anexos(
             # tipo_archivos = Counter([x.content_type for x in attachments])
             # print(nomb_archivo)
             # leemos la bitácora (sólo debe haber UN archvio excel que empiece con BCA, BCP o BC40 en el correo, si hay más o menos de 1, rechazamos
+
             bitacora = pd.read_excel(
                 BytesIO(
                     [
@@ -432,7 +510,7 @@ def validar_anexos(
                 )
             )
             #if (bitacora.shape[0] > 10) or (bitacora.shape[1] > 9):
-            print(f"Tamaño bitacora para {asunto}:{bitacora.shape}")
+            #print(f"Tamaño bitacora para {asunto}:{bitacora.shape}")
             if bitacora.shape[0] > BITACORA_SIZE:
                excepcion = "La bitácora parece exceder de tamaño. No incluir toda la historia de su bitácora, enviar sólo el renglón correspondiente a la petición de su correo. O puede ser que inadvertidamente haya agregado/modificado renglones/columnas vacías. Revise la cantidad de filas o columnas."
                print(f"Excepcion para {asunto}: {excepcion}")
@@ -448,8 +526,10 @@ def validar_anexos(
                 excepcion = "O la bitácora está vacía o no tiene las columnas del formato original. Revise también que no haya incluido columnas adicionales al final (incluso vacías)"
                 raise Exception(excepcion)
         else:
-            excepcion = "No adjuntó la bitácora a su solicitud o incluyó más de una bitácora o bien, ésta no tiene el nombre correcto. Recuerde que, según el tipo de operación, el nombre de la bitácora debe empezar con BCA, BCP o BC40 (consulte la circular para más detalles)."
-            raise Exception(excepcion)
+            if tipo_operacion.lower() not in ["uiss88", "ufc1127f", "ufc1127c"]:
+                excepcion = "No adjuntó la bitácora a su solicitud o incluyó más de una bitácora o bien, ésta no tiene el nombre correcto. Recuerde que, según el tipo de operación, el nombre de la bitácora debe empezar con BCA, BCP o BC40 (consulte la circular para más detalles). No adjuntar bitácora si su asunto es UISS88, UFC1127F o UFC1127C"
+                raise Exception(excepcion)
+
         # acá va la paarte tediosa de esta función, para cada tipo de operación, debemos validar que la suma de anexos por tipo de archivo sea la indicada en la circular
         # dada la extensión, no comentaré, cualquier cosa, escribir al administrador
         if tipo_operacion.lower() in ["cda01", "cda02"]:
@@ -1127,6 +1207,63 @@ def validar_anexos(
                     raise Exception(excepcion)
                 else:
                     return True, None, bitacora
+                
+        # Código para 3 nuevos motivos
+        #return True, None, None
+        elif tipo_operacion.lower() in ["uiss88", "ufc1127f", "ufc1127c"]:
+            if len(attachments) >= 5:
+                tipo_archivos = Counter([x.content_type for x in attachments])
+                if (
+                    tipo_archivos.get(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "application/vnd.ms-excel",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "application/vnd.ms-excel.sheet.macroenabled.12",
+                        0,
+                    )
+                    >= 1
+                ) and (
+                    tipo_archivos.get(
+                        "application/pdf",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "image/jpeg",
+                        0,
+                    )
+                    + tipo_archivos.get(
+                        "image/png",
+                        0,
+                    )
+                    >= 3
+                ) and (
+                    tipo_archivos.get(
+                        "text/plain",
+                        0,
+                )
+                    >= 1
+                ):
+                    return True, None, None
+                else:
+                    excepcion = "Debe incluir al menos 05 archivos: 1-Oficio de solicitud dirigido a la Coordinación a la que se remitió la información (.pdf), 2-Acta circunstanciada (.pdf), 3-Cuenta individual filtrada por registro patronal (.pdf), 4-Archivo DISPMAG (Excel), 5-Archivo .txt (bloc de notas). No en .zip"
+                    raise Exception(excepcion)
+            else:
+                if (
+                    f"{asunto.lower()}" not in cuerpo.lower()
+                    or "file://" not in cuerpo.lower()
+                ):
+                    excepcion = f"Debe incluir al menos cinco archivos: 1-Oficio de solicitud dirigido a la Coordinación a la que se remitió la información (.pdf), 2-Acta circunstanciada (.pdf), 3-Cuenta individual filtrada por registro patronal (.pdf), 4-Archivo DISPMAG (Excel), 5-Archivo .txt (bloc de notas). No en .zip"
+                    # 6-Deslinde de responsabilidades (.pdf)"
+                    raise Exception(excepcion)
+                else:
+                    return True, None, bitacora
+        # Fin de código para 3 nuevos motivos
+
         else:
             excepcion = f"Tipo de operación {tipo_operacion} inválida. Revise el asunto de su correo."
             raise Exception(excepcion)
@@ -1145,7 +1282,7 @@ def validar_anexos(
                 return True, None, bitacora
             except NameError as e:
                 print(f"Excepcion general para: {asunto}")
-                return False, "No adjuntó la bitácora a su solicitud o incluyó más de una bitácora o bien, ésta no tiene el nombre correcto. Recuerde que, según el tipo de operación, el nombre de la bitácora debe empezar con BCA, BCP o BC40 (consulte la circular para más detalles).", None
+                return False, "No adjuntó la bitácora a su solicitud o incluyó más de una bitácora o bien, ésta no tiene el nombre correcto. Recuerde que, según el tipo de operación, el nombre de la bitácora debe empezar con BCA, BCP o BC40 (consulte la circular para más detalles). No es necesario bitácora si su asunto es UISS88,UFC1127F O UFC1127C", None
             except Exception as e:
                 return False, e, None
         else:
@@ -1212,6 +1349,49 @@ def correo_respuesta(
         server.sendmail(sender, receiver, msg.as_string())
 
 
+# función que envía correo al subdelegado informando que tiene errores en la bitácora
+def correo_respuesta_bitacora(
+    exito: bool, excepciones: str, destinatario: str, asunto_original: str, operation: str
+) -> None:
+    msg = MIMEMultipart("related")
+    msg["From"] = EMAIL_MAILBOX
+    sender = EMAIL_MAILBOX
+    msg["To"] = destinatario
+    receiver = destinatario
+
+    # Error al procesar
+    msg["Subject"] = f"{EMAIL_ASUNTO_ERROR} - {asunto_original}"
+    ruta_Circular = URL_CIRCULAR
+
+    if operation == "MOD40":
+        msg_dudas = EMAIL_DUDAS_MOD40
+    else:
+        msg_dudas = EMAIL_DUDAS
+
+    html = f"""\
+    <html>
+    <body>
+            <p>Estimado o estimada,<br></p>
+            <p>Recibimos su correo con el identificador {asunto_original}, pero tome en cuenta para futuros envíos que la bitácora que adjuntó contiene valores no definidos en la plantilla:</p>
+                <ol>{excepciones}</ol>
+            <p>Por favor revisar y utilizar sólo la versión del archivo bitácora plantilla que puede<a href={ruta_Circular}> descargar aquí</a></p>
+            <p>En este caso en particular, no es necesario reenviar su solicitud. Debe tener un correo con asunto 'Mensaje asignado - {asunto_original}' confirmando que fue asignado a un responsable.</p>
+            <p>Si tiene dudas, puede escribir un correo a {msg_dudas}</p>
+            <p>
+                Cordiales saludos.
+            </p>
+
+        </body>
+    </html>
+    """
+    part2 = MIMEText(html, "html")
+    msg.attach(part2)
+
+    with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
+        server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
+        server.sendmail(sender, receiver, msg.as_string())
+
+
 # correo que confirma a le operadore que se marcó como atendida la solicitud indicada
 def correo_respuesta_atencion(exito, destinatario, asunto):
     msg = MIMEMultipart("related")
@@ -1245,34 +1425,129 @@ def correo_respuesta_atencion(exito, destinatario, asunto):
 
 # función para reenviar las solicitudes a le operadore asignade
 def correo_atender(
-    mensaje: EmailMessage, id_mensaje: str, tipo_operacion: str, enviado_por: str
+    mensaje: EmailMessage, id_mensaje: str, tipo_operacion: str, enviado_por: str, *args
 ):
+
     df_responsable = (
         df_usuarios.loc[df_usuarios.cve_solicitud.str.lower() == tipo_operacion.lower()]
         .reset_index(drop=True)
         .iloc[0]
     )
     responsable = df_responsable["responsable"]
+
     msg = mensaje
     msg["CC"] = [df_responsable["ccp_1"], df_responsable["ccp_2"]]
+
     for key in [
         x
         for x in msg.keys()
         if x not in ["Subject", "Content-Type", "MIME-Version", "X-MS-Has-Attach"]
     ]:
         del msg[key]
+
     msg["From"] = EMAIL_MAILBOX
     sender = EMAIL_MAILBOX
     msg["To"] = f"{responsable},{df_responsable['ccp_1']},{df_responsable['ccp_2']}"
-    asunto_orig = msg["Subject"]
+
     del msg["Subject"]
-    msg["Subject"] = f"A atender: {id_mensaje} - Enviado por: {enviado_por}"
+    nuevo_asunto = f"A atender: {id_mensaje} - Enviado por: {enviado_por}"
+    nuevo_asunto = nuevo_asunto.replace('@imss.gob.mx', '')
+
+    for arg in args:
+        nuevo_asunto = nuevo_asunto + f" el {arg}"
+
+    nuevo_asunto = nuevo_asunto.replace('+00:00', '')
+
+    msg["Subject"] = nuevo_asunto
+
     del msg["Received"]
     receiver = [responsable, df_responsable["ccp_1"], df_responsable["ccp_2"]]
+
     with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
         server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
         server.sendmail(sender, receiver, msg.as_string())
 
+# Código para solicitud de CA (revisión por OOAD)
+def correo_atender_revisores(
+    mensaje: EmailMessage, id_mensaje: str, tipo_operacion: str, enviado_por: str, *args
+):
+
+    df_responsable = (
+        df_usuarios.loc[df_usuarios.cve_solicitud.str.lower() == tipo_operacion.lower()]
+        .reset_index(drop=True)
+        .iloc[0]
+    )
+    responsables = df_responsable["revisores_temporales"]
+    responsables = responsables.replace(";", ",")
+
+    msg = mensaje
+    # msg["CC"] = EMAIL_ADMINISTRADOR
+
+    for key in [
+        x
+        for x in msg.keys()
+        if x not in ["Subject", "Content-Type", "MIME-Version", "X-MS-Has-Attach"]
+    ]:
+        del msg[key]
+
+    msg["From"] = EMAIL_MAILBOX
+    sender = EMAIL_MAILBOX
+
+    msg["To"] = responsables
+
+    del msg["Subject"]
+    nuevo_asunto = f"REVISAR: {id_mensaje} - Enviado por: {enviado_por}"
+    nuevo_asunto = nuevo_asunto.replace('@imss.gob.mx', '')
+
+    for arg in args:
+        nuevo_asunto = nuevo_asunto + f" el {arg}"
+
+    nuevo_asunto = nuevo_asunto.replace('+00:00', '')
+
+    msg["Subject"] = nuevo_asunto
+
+    del msg["Received"]
+    # receiver = [responsables]
+    receiver = [responsables]
+
+    with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
+        server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
+        server.sendmail(sender, receiver, msg.as_string())
+
+# Fin código para solicitud de CA (revisión por OOAD)
+
+def correo_debug(destinatario, asunto, cuerpo, *args):
+    msg = MIMEMultipart("related")
+    msg["From"] = EMAIL_MAILBOX
+    sender = EMAIL_MAILBOX
+    msg["To"] = destinatario
+    receiver = destinatario
+    
+    msg["Subject"] = f"{asunto}"
+
+    html = f"""
+        <p>LOG - EmailProcessorBot (Robot Circular07)</p>
+        <p>{cuerpo}</p>
+    """
+
+    for arg in args:
+        html = f"""
+            <p>{html}</p>
+            <p></p>
+            <p>CIFRAS{arg}</p>
+            """
+    
+    html = html + f"""
+        <p>FOLDER_MAILBOX: {FOLDER_MAILBOX}</p>
+        <p>SOLO_REENVIO_POR_BUZON_LLENO: {SOLO_REENVIO_POR_BUZON_LLENO}</p>
+        """
+
+    part2 = MIMEText(html, "html")
+    msg.attach(part2)
+
+    with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
+        server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
+        server.sendmail(sender, receiver, msg.as_string())
 
 def limpiar_carpeta(carpeta: str = "Sent"):
     mailbox = MailBox(
