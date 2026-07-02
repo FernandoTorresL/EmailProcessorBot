@@ -23,8 +23,8 @@ El código original fue desarrollado por personal de la _USE_ y posteriormente e
 
 El proyecto fue construido usando:
 
-- Python v3.11 (original)
-- Python v3.12.3 (W10 - Pruebas)
+- Python v3.11.4
+- Python v3.11.4 (W10 - Pruebas)
 - Python v3.12.3 (OS - Pruebas)
 - [DavMail](https://davmail.sourceforge.net) (Requiere Java JDK en el equipo donde se instale. Ver [setup](https:davmail.sourceforge.net/windowssetup.html))
 
