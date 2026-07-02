@@ -279,10 +279,19 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,linux,macos,visualstudiocode,python,jupyternotebooks
 
-*.code-workspace
 credenciales.py
+nss_ooad_ope.csv
+logfile.log
+
 Destinatarios*.csv
 Directorio Nacional Subdelegados*.csv
-logfile.log
+
 archivo/
-archivo*/
+estadisticas/
+
+*.code-workspace
+*.xls*
+*.bak
+*.zip
+*.pdf
+tmp*.*

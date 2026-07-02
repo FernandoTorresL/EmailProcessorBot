@@ -19,6 +19,7 @@ while true; do
     # Sleep for 20 minutes (1200 seconds)
     # Sleep for 15 minutes (900 seconds)
     # Sleep for 08 minutes (450 seconds)
-    # Sleep for 3.5minutes (200 seconds)
-    sleep 200
+    # Sleep for 3.5minutes, (210 seconds)
+    # Sleep for 0.35minutes, (21 seconds)
+    sleep 900
 done

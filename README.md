@@ -45,8 +45,9 @@ Debes crear y actualizar los siguientes archivos:
 - A csv file "Destinatarios en CA.csv"
 - A csv file "Directorio Nacional Subdelegados.csv"
 - A python file "credenciales.py"
+- A csv file "nss_ooad_ope.csv"
 
-> Todos basados en sus versiones .example.py incluidos en este repositorio.
+> Todos basados en sus versiones .example incluidos en este repositorio.
 
 - Si no se detecta Java, deberá crear un archivo davmail64.ini y usar la línea siguiente con la ruta de exe de DavMail
 
@@ -135,6 +136,7 @@ Antes de ejecutar el programa, debes crear y actualizar el contenido de los arch
 * credenciales.py
 * Destinatarios en CA.csv
 * Directorio Nacional Subdelegados.csv
+* nss_ooad_ope.csv
 
 Y podrás ejecutar el programa:
 > Then, you can execute the program:
