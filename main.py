@@ -194,15 +194,15 @@ try:
                                 "sujeto": asunto.split("-")[3],
                             }
                             # movemos el archivo a la carpeta /SOLICITUDES VALIDAS/ y enviamos los correos de respuesta y atención
-                            mailbox.move(f"{msg.uid}", "INBOX/SOLICITUDES VALIDAS")
+                            mailbox.move(f"{msg.uid}", "INBOX/UISS88_REENVIADOS")
                             i_total_validos += 1
 
                             #### 
                             if not SOLO_REENVIO_POR_BUZON_LLENO:
-                                correo_respuesta(True, "", msg.from_, asunto, operation_upper)
+                                # correo_respuesta(True, "", msg.from_, asunto, operation_upper)
                                 # inseramos en la bd
                                 # col_solicitudes.insert_one(mongo_object)
-                                col_solicitudes2.insert_one(mongo_object)
+                                # col_solicitudes2.insert_one(mongo_object)
                                 # le ponemos fecha y asunto a la bitácora y la insertamos
 
                                 # Si NO se trata de los 3 nuevos asuntos, realiza:
@@ -256,7 +256,7 @@ try:
 
                             datetime_correo_original = msg.date-timedelta(hours=6)
 
-                            correo_atender(msg.obj, asunto, tipo_operacion, msg.from_, datetime_correo_original)
+                            #correo_atender(msg.obj, asunto, tipo_operacion, msg.from_, datetime_correo_original)
 
                             # Código para solicitud de CA (revisión por OOAD)
                             if tipo_operacion.lower() in ["uiss88"]:
