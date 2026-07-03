@@ -288,6 +288,8 @@ Directorio Nacional Subdelegados*.csv
 
 archivo/
 estadisticas/
+tmp/
+Anexos/
 
 *.code-workspace
 *.xls*

@@ -260,15 +260,11 @@ try:
 
                             # Código para solicitud de CA (revisión por OOAD)
                             if tipo_operacion.lower() in ["uiss88"]:
-                                # "delegacion": asunto.split("-")[0],
-                                # "subdelegacion": asunto.split("-")[1],
-
-                                ooad_revisores = asunto.split("-")[0]
-                                subdel_revisores = asunto.split("-")[1]
-
-                                correo_atender_revisores(msg.obj, asunto, tipo_operacion, msg.from_, datetime_correo_original)
 
                                 i_total_nuevos_motivos += 1
+                                
+                                verifica_revisores(msg.obj, asunto, tipo_operacion, msg.from_, datetime_correo_original)
+                                
                             # Fin código para solicitud de CA (revisión por OOAD)
 
                             # print("SOL. VALIDA: ", asunto)
@@ -450,7 +446,7 @@ try:
                 <ol>{i_total_buzon_lleno} Buzon_lleno</ol>
                 <ol>{i_total_junk} Junk</ol>
                 <br>
-                <ol>{i_total_nuevos_motivos} Nuevos motivos</ol>
+                <ol>{i_total_nuevos_motivos} Nuevos motivos validos</ol>
             </p>
             <br>
     """

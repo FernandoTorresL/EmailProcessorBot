@@ -1467,21 +1467,53 @@ def correo_atender(
         server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
         server.sendmail(sender, receiver, msg.as_string())
 
+
 # Código para solicitud de CA (revisión por OOAD)
+def verifica_revisores(
+    mensaje: EmailMessage, id_mensaje: str, tipo_operacion: str, enviado_por: str, datetime_correo_original):
+    import warnings
+
+    if 'df_ooad_mail' not in locals():
+        df_ooad_mail = pd.read_csv("Destinatarios_revisores.csv", dtype=str)
+
+        # Check for duplicates in 'ooad' column
+        duplicate_ooads = df_ooad_mail[df_ooad_mail['ooad'].duplicated(keep=False)]['ooad'].unique()
+
+        if len(duplicate_ooads) > 0:
+            warning_msg = f"WARNING: Duplicate 'ooad' values found: {', '.join(duplicate_ooads)}. Please review your data. Raising an exception."
+            warnings.warn(warning_msg)
+            # raise ValueError("Duplicate 'ooad' values found. Please resolve data inconsistencies.")
+
+        # Drop duplicates based on 'ooad' column, keeping the first occurrence (though not needed if no duplicates)
+        df_ooad_mail = df_ooad_mail.drop_duplicates(subset=['ooad'], keep='first')
+
+        # Move 'ooad' column to the beginning
+        # Get all columns except 'ooad'
+        cols = df_ooad_mail.columns.tolist()
+        cols.remove('ooad')
+        # Reorder columns with 'ooad' first
+        df_ooad_mail = df_ooad_mail[['ooad'] + cols]
+
+        # Set 'ooad' as the index
+        df_ooad_mail = df_ooad_mail.set_index('ooad')
+
+        # Sort the DataFrame by the 'ooad' index
+        df_ooad_mail = df_ooad_mail.sort_index()
+
+    # If the dataframe already exist
+    ooad_asunto = id_mensaje.split("-")[0]
+
+    # Get revisores
+    email_revisores = df_ooad_mail.loc[ooad_asunto].revisores
+
+    correo_atender_revisores(mensaje, id_mensaje, enviado_por, email_revisores, datetime_correo_original)
+
+
 def correo_atender_revisores(
-    mensaje: EmailMessage, id_mensaje: str, tipo_operacion: str, enviado_por: str, *args
+    mensaje: EmailMessage, id_mensaje: str, enviado_por: str, email_revisores: str, *args
 ):
 
-    df_responsable = (
-        df_usuarios.loc[df_usuarios.cve_solicitud.str.lower() == tipo_operacion.lower()]
-        .reset_index(drop=True)
-        .iloc[0]
-    )
-    responsables = df_responsable["revisores_temporales"]
-    responsables = responsables.replace(";", ",")
-
     msg = mensaje
-    # msg["CC"] = EMAIL_ADMINISTRADOR
 
     for key in [
         x
@@ -1493,7 +1525,7 @@ def correo_atender_revisores(
     msg["From"] = EMAIL_MAILBOX
     sender = EMAIL_MAILBOX
 
-    msg["To"] = responsables
+    msg["To"] = email_revisores
 
     del msg["Subject"]
     nuevo_asunto = f"REVISAR: {id_mensaje} - Enviado por: {enviado_por}"
@@ -1503,12 +1535,10 @@ def correo_atender_revisores(
         nuevo_asunto = nuevo_asunto + f" el {arg}"
 
     nuevo_asunto = nuevo_asunto.replace('+00:00', '')
-
     msg["Subject"] = nuevo_asunto
 
     del msg["Received"]
-    # receiver = [responsables]
-    receiver = [responsables]
+    receiver = [email_revisores]
 
     with smtplib.SMTP(IP_SMTP, PORT_SMTP) as server:
         server.login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
