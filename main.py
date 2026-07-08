@@ -7,6 +7,14 @@ try:
     ).login(EMAIL_MAILBOX, PASSWORD_MAILBOX)
     mailbox.folder.set(FOLDER_MAILBOX)
 
+    progress_bar = tqdm(
+        total = MSG_LIMIT,
+        leave=True,
+        desc = "Leyendo correos",
+        unit="Correo"
+    )
+    
+
     cifras = ''
     i_total_correos = 0
     
@@ -21,9 +29,10 @@ try:
 
     i_total_nuevos_motivos = 0
 
-    for msg in mailbox.fetch(limit=MSG_LIMIT, reverse=False):
+    for msg in mailbox.fetch(limit=MSG_LIMIT, reverse=True):
 
         i_total_correos += 1
+        progress_bar.update(1)
         # primero validamos que el correo venga de un remitente @imss.gob, si sí, lo almacenamos
         if (DOMINIO_MAILBOX in msg.from_) and (BAD_MAIL_STRING not in msg.subject.strip()):
             try:
@@ -420,6 +429,7 @@ try:
         # os.remove(path_filename)
 
     i_total_correos = f"{i_total_correos:03d}"
+    progress_bar.close()
     print ('Correos procesados: ', i_total_correos)
     print("No hay más mensajes. FIN")
 

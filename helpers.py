@@ -12,6 +12,8 @@ import ssl
 import string
 import time
 import traceback
+
+from tqdm import tqdm
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from email import encoders
@@ -188,8 +190,9 @@ def validar_asunto(asunto: str, remitente: str) -> bool:
                         # leemos el archivo con los NSS
                         df_nss_ooad_ope = pd.read_csv(
                             f"{path}/nss_ooad_ope.csv",
-                            quotechar="'"
-                        ).astype(str)
+                            quotechar="'",
+                            dtype=str
+                        )
 
                         nss_asunto = asunto_split[3]
                         del_asunto = asunto_split[0]
